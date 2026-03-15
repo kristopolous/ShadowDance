@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import time
 from functools import wraps
-from typing import Any, Callable, Literal, Optional, Tuple
+from typing import Any, Callable, Literal, Optional, Dict
 from contextlib import contextmanager
 
 from langsmith import trace
@@ -110,36 +110,21 @@ class ShadowDance:
     Works with any client: OpenAI, Unitree robot SDKs, or custom clients.
     Every method call becomes a traced LangSmith event with proper run type.
     
-    Optionally logs to datasets for experiments and evaluation.
-    Automatically nests under parent runs created by @task decorator or task_context.
-    
     Subclasses can override get_token_count() and get_cost() for provider-specific
     usage tracking.
 
     Usage:
         from shadowdance import ShadowDance, task
 
-        # OpenAI client - traced as LLM
+        # Basic usage
         client = OpenAI()
         client = ShadowDance(client, run_type="llm")
-        response = client.chat.completions.create(...)
-
-        # Robot client - traced as tool
-        client = SportClient()
-        client = ShadowDance(client, run_type="tool")
-        client.Move(0.3, 0, 0)
         
-        # With task decorator for nesting
+        # With nesting
         @task("pick_up_box")
         def my_task():
             robot = ShadowDance(SportClient())
-            robot.Move(0.3, 0, 0)  # Nested under "pick_up_box"
-        
-        # Or specify parent run manually
-        client = ShadowDance(SportClient(), parent_run="my_task")
-        
-        # Log to dataset for experiments
-        client = ShadowDance(client, run_type="tool", log_to_dataset="robot-tasks")
+            robot.Move(0.3, 0, 0)
     """
 
     def __init__(
@@ -155,12 +140,8 @@ class ShadowDance:
         Args:
             client: The client object to wrap (OpenAI, Unitree, etc.).
             run_type: LangSmith run type for better dashboard filtering.
-                      Options: "tool", "chain", "llm", "retriever", "embedding", "prompt"
-                      Default: "tool"
-            parent_run: Optional name of parent run for nesting.
-                       If None, auto-detects from @task decorator context.
-            log_to_dataset: Optional dataset name to log examples for experiments.
-                           Creates/uses dataset for evaluation and regression testing.
+            parent_run: Optional parent run name for nesting.
+            log_to_dataset: Optional dataset name for experiment logging.
         """
         self._client = client
         self._run_type = run_type
@@ -183,69 +164,45 @@ class ShadowDance:
                 self._log_to_dataset = None
 
     def _get_parent_run(self):
-        """
-        Get the parent run for nesting.
-        
-        Priority:
-        1. Explicit parent_run parameter
-        2. Auto-detect from current trace context (@task decorator)
-        3. None (no nesting)
-        """
+        """Get the parent run for nesting."""
         if self._parent_run_name:
             return None
         return get_parent_run()
 
-    def get_token_count(self, request: Any, response: Any) -> Optional[dict]:
+    def get_token_count(self, request: Any, response: Any) -> Optional[Dict[str, int]]:
         """
         Extract token count from API request/response.
         
-        Override this method in subclasses to extract provider-specific
-        token usage information.
+        Override in subclasses for provider-specific extraction.
         
         Args:
-            request: The request object/dict sent to the API
+            request: The request arguments sent to the API
             response: The response object from the API
             
         Returns:
-            Dict with token counts or None if not available:
-            {
-                "input_tokens": int,
-                "output_tokens": int,
-                "total_tokens": int,
-            }
+            Dict with token counts or None:
+            {"input_tokens": int, "output_tokens": int, "total_tokens": int}
         """
         pass
 
-    def get_cost(self) -> Optional[dict]:
+    def get_cost(self, request: Any, response: Any) -> Optional[Dict[str, float]]:
         """
         Calculate cost for the API call.
         
-        Override this method in subclasses to calculate provider-specific
-        pricing based on token usage and model pricing.
+        Override in subclasses for provider-specific pricing.
         
+        Args:
+            request: The request arguments sent to the API
+            response: The response object from the API
+            
         Returns:
-            Dict with cost information or None if not available:
-            {
-                "input_cost": float,
-                "output_cost": float,
-                "total_cost": float,
-            }
+            Dict with cost info or None:
+            {"input_cost": float, "output_cost": float, "total_cost": float}
         """
         pass
 
     def __getattr__(self, name: str) -> Any:
-        """
-        Intercept attribute access on the wrapped client.
-
-        If the attribute is a callable method, wrap it with LangSmith tracing.
-        Otherwise, return the attribute directly.
-
-        Args:
-            name: The name of the attribute to access.
-
-        Returns:
-            The wrapped method or the original attribute.
-        """
+        """Intercept attribute access on the wrapped client."""
         attr = getattr(self._client, name)
 
         if callable(attr):
@@ -254,30 +211,18 @@ class ShadowDance:
         return attr
 
     def _wrap_method(self, method: Callable, name: str) -> Callable:
-        """
-        Wrap a method with LangSmith tracing.
-        
-        Automatically nests under parent runs from @task decorator,
-        task_context, or explicit parent_run parameter.
-
-        Args:
-            method: The method to wrap.
-            name: The name of the method.
-
-        Returns:
-            A wrapped version of the method that logs to LangSmith.
-        """
+        """Wrap a method with LangSmith tracing."""
 
         @wraps(method)
         def traced(*args: Any, **kwargs: Any) -> Any:
             start_time = time.perf_counter()
             result: Any = None
-            error: Optional[Exception] = None
             
             parent = self._get_parent_run()
 
             with trace(name=name, run_type=self._run_type, parent=parent) as rt:
                 try:
+                    # Log inputs
                     input_data = {}
                     if args:
                         input_data["args"] = args
@@ -285,31 +230,30 @@ class ShadowDance:
                         input_data["kwargs"] = kwargs
                     rt.add_inputs(input_data)
 
+                    # Execute method
                     result = method(*args, **kwargs)
 
+                    # Log outputs
                     rt.add_outputs({"result": result})
 
-                    # Extract and log token usage if available
+                    # Extract and log token usage (if subclass provides it)
                     token_usage = self.get_token_count(kwargs, result)
                     if token_usage:
                         rt.add_metadata({"token_usage": token_usage})
                     
-                    # Extract and log cost if available
-                    cost = self.get_cost()
+                    # Extract and log cost (if subclass provides it)
+                    cost = self.get_cost(kwargs, result)
                     if cost:
                         rt.add_metadata({"cost": cost})
 
+                    # Log to dataset if configured
                     if self._log_to_dataset and self._ls_client:
                         try:
                             self._ls_client.create_example(
                                 inputs=input_data,
-                                outputs={"result": result, "duration_ms": (time.perf_counter() - start_time) * 1000},
+                                outputs={"result": result},
                                 dataset_name=self._log_to_dataset,
-                                metadata={
-                                    "method": name,
-                                    "run_type": self._run_type,
-                                    "success": True,
-                                },
+                                metadata={"method": name, "run_type": self._run_type},
                             )
                         except Exception:
                             pass
@@ -317,7 +261,6 @@ class ShadowDance:
                     return result
 
                 except Exception as e:
-                    error = e
                     rt.add_event({"name": "error", "data": {"error": str(e)}})
                     
                     if self._log_to_dataset and self._ls_client:
@@ -326,11 +269,7 @@ class ShadowDance:
                                 inputs=input_data,
                                 outputs={"error": str(e)},
                                 dataset_name=self._log_to_dataset,
-                                metadata={
-                                    "method": name,
-                                    "run_type": self._run_type,
-                                    "success": False,
-                                },
+                                metadata={"method": name, "run_type": self._run_type},
                             )
                         except Exception:
                             pass
@@ -338,8 +277,7 @@ class ShadowDance:
                     raise
 
                 finally:
-                    elapsed_ms = (time.perf_counter() - start_time) * 1000
-                    rt.add_metadata({"duration_ms": elapsed_ms})
+                    rt.add_metadata({"duration_ms": (time.perf_counter() - start_time) * 1000})
 
         return traced
 
@@ -347,10 +285,4 @@ class ShadowDance:
         return f"ShadowDance({self._client!r})"
 
 
-__all__ = [
-    "ShadowDance",
-    "task",
-    "task_context",
-    "get_parent_run",
-    "RunType",
-]
+__all__ = ["ShadowDance", "task", "task_context", "get_parent_run", "RunType"]
