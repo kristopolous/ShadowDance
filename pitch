@@ -1,0 +1,1 @@
+I extended industry standard LLM observability and logging tools to support unitree robots so that you can drill down any robotic task start to finish. With ShadowDance, which is now in pypi, A single line of code will make your robot actions and decisions surface as a set of tool calls.

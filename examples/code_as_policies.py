@@ -107,14 +107,14 @@ class RobotAPI:
 class VisionSystem:
     """
     Vision-Language Model for scene understanding.
-    
+
     Uses OpenRouter-compatible API to analyze images.
     """
-    
-    def __init__(self):
+
+    def __init__(self, model: str = None):
         self._api_key = os.environ.get("OPENAI_API_KEY")
         self._api_base = os.environ.get("OPENAI_BASE_URL")
-        self._model = os.environ.get("DEFAULT_MODEL", "mock")
+        self._model = model or os.environ.get("DEFAULT_MODEL", "mock")
     
     def analyze_scene(self, image_path: str, task: str) -> dict:
         """
@@ -240,14 +240,14 @@ For the grasp point, specify where the robot should grasp (typically center of o
 class CodeGenerator:
     """
     LLM that generates Python code for robot tasks.
-    
+
     Based on "Code as Policies" approach.
     """
-    
-    def __init__(self):
+
+    def __init__(self, model: str = None):
         self._api_key = os.environ.get("OPENAI_API_KEY")
         self._api_base = os.environ.get("OPENAI_BASE_URL")
-        self._model = os.environ.get("DEFAULT_MODEL", "mock")
+        self._model = model or os.environ.get("DEFAULT_MODEL", "mock")
     
     def generate(self, task: str, scene: dict) -> str:
         """
@@ -428,7 +428,6 @@ class SafeExecutor:
 # Main Agent (orchestrates everything)
 # ============================================================================
 
-@task("code_as_policies_task", tags=["llm", "vision", "demo"])
 class CodeAsPoliciesAgent:
     """
     Code-as-Policies agent.
@@ -442,8 +441,10 @@ class CodeAsPoliciesAgent:
     
     def __init__(self):
         # Wrap individual components with appropriate run types
-        self.vision = ShadowDance(VisionSystem(), run_type="llm")  # VLM calls
-        self.codegen = ShadowDance(CodeGenerator(), run_type="llm")  # LLM calls
+        # Get model from environment or use default
+        model = os.environ.get("DEFAULT_MODEL", "mock")
+        self.vision = ShadowDance(VisionSystem(model=model), run_type="llm")  # VLM calls
+        self.codegen = ShadowDance(CodeGenerator(model=model), run_type="llm")  # LLM calls
         self.robot = RobotAPI()
     
     def run(self, task_name: str, image_path: str) -> bool:
@@ -501,7 +502,7 @@ def main():
     """Run the code-as-policies demo."""
     os.environ["LANGCHAIN_TRACING_V2"] = "true"
     os.environ["LANGCHAIN_PROJECT"] = "shadowdance"
-    
+
     print("\n" + "="*60)
     print("ShadowDance: Code-as-Policies Demo")
     print("="*60)
@@ -511,25 +512,23 @@ def main():
     print("  3. Safe execution → robot control")
     print("\nBased on: https://code-as-policies.github.io/")
     print("\nAll traced via ShadowDance (ONE LINE)\n")
-    
-    # Create agent
-    agent = CodeAsPoliciesAgent()
-    
-    # ONE LINE - wrap with ShadowDance as chain type (orchestrates multiple components)
-    agent = ShadowDance(agent, run_type="chain")
-    
-    # Get image
-    image_path = Path(__file__).parent.parent / "assets" / "box-on-table.jpg"
-    
-    # Run task
-    success = agent.run(
-        task_name="Pick up the white box",
-        image_path=str(image_path),
-    )
-    
-    print("View traces at: https://smith.langchain.com")
-    print("Project: shadowdance\n")
-    
+
+    with task_context("code_as_policies_demo", tags=["llm", "vision", "demo"]):
+        # Create agent
+        agent = CodeAsPoliciesAgent()
+
+        # Get image
+        image_path = Path(__file__).parent.parent / "assets" / "box-on-table.jpg"
+
+        # Run task
+        success = agent.run(
+            task_name="Pick up the white box",
+            image_path=str(image_path),
+        )
+
+        print("View traces at: https://smith.langchain.com")
+        print("Project: shadowdance\n")
+
     return 0 if success else 1
 
 

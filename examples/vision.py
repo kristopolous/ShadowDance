@@ -58,7 +58,14 @@ class VisionSystem:
         Returns:
             List of detected objects with positions.
         """
-        if self.model == "mock" or not self._api_key:
+        # Check if we should use mock mode
+        use_mock = (self.model == "mock" or 
+                   not self._api_key or 
+                   not self._api_base or
+                   not self.model)
+        
+        if use_mock:
+            print(f"  [Vision] Using mock (model={self.model}, api_key={bool(self._api_key)}, base={bool(self._api_base)})")
             return self._mock_detect(image_path, task)
         else:
             return self._real_detect(image_path, task)
@@ -88,17 +95,25 @@ class VisionSystem:
 
     def _encode_image(self, image_path: str) -> str:
         """Encode image to base64."""
-        with open(image_path, "rb") as f:
-            return base64.b64encode(f.read()).decode("utf-8")
+        try:
+            with open(image_path, "rb") as f:
+                return base64.b64encode(f.read()).decode("utf-8")
+        except Exception as e:
+            print(f"  [Vision] Error encoding image: {e}")
+            return None
 
     def _real_detect(self, image_path: str, task: str = "") -> list[DetectedObject]:
         """Real detection using OpenAI-compatible API."""
         import httpx
         
         print(f"  [Vision] Real detection on: {image_path} using {self.model}")
-        
+        print(f"  [Vision] API Key set: {bool(self._api_key)}, Base URL: {self._api_base}")
+
         # Encode image
         base64_image = self._encode_image(image_path)
+        if not base64_image:
+            print("  [Vision] Image encoding failed, using mock")
+            return self._mock_detect(image_path, task)
         
         # Build the request
         headers = {
