@@ -105,7 +105,8 @@ def main():
     )
     
     # Wrap with OpenRouter-aware ShadowDance
-    model = os.environ.get("DEFAULT_MODEL", "openrouter/hunter-alpha")
+    # Use mistralai/ministral-3b-2512 - non-reasoning model with real pricing
+    model = "mistralai/ministral-3b-2512"
     client = OpenRouterShadowDance(client, run_type="llm", model=model)
     
     # Make API call - usage and cost automatically logged to LangSmith
