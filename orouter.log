@@ -1,0 +1,21 @@
+{
+  "object": "chat.completion.chunk",
+  "usage": {
+    "completion_tokens": 2,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "cost": 0.95,
+    "cost_details": {
+      "upstream_inference_cost": 19
+    },
+    "prompt_tokens": 194,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "cache_write_tokens": 100,
+      "audio_tokens": 0
+    },
+    "total_tokens": 196
+  }
+}
+
