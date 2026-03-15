@@ -440,8 +440,9 @@ class CodeAsPoliciesAgent:
     """
     
     def __init__(self):
-        self.vision = VisionSystem()
-        self.codegen = CodeGenerator()
+        # Wrap individual components with appropriate run types
+        self.vision = ShadowDance(VisionSystem(), run_type="llm")  # VLM calls
+        self.codegen = ShadowDance(CodeGenerator(), run_type="llm")  # LLM calls
         self.robot = RobotAPI()
     
     def run(self, task: str, image_path: str) -> bool:
@@ -510,8 +511,8 @@ def main():
     # Create agent
     agent = CodeAsPoliciesAgent()
     
-    # ONE LINE - wrap with ShadowDance
-    agent = ShadowDance(agent)
+    # ONE LINE - wrap with ShadowDance as chain type (orchestrates multiple components)
+    agent = ShadowDance(agent, run_type="chain")
     
     # Get image
     image_path = Path(__file__).parent.parent / "assets" / "box-on-table.jpg"

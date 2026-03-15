@@ -24,8 +24,8 @@ def main():
         base_url=os.environ["OPENAI_BASE_URL"],
     )
     
-    # ONE LINE - wrap with ShadowDance
-    client = ShadowDance(client)
+    # ONE LINE - wrap with ShadowDance as LLM type
+    client = ShadowDance(client, run_type="llm")
     
     # All calls now traced in LangSmith
     print("Calling OpenAI (via OpenRouter)...")

@@ -8,18 +8,30 @@ timestamp, and duration.
 Usage:
     from shadowdance import ShadowDance
     
+    # OpenAI client (LLM runs)
     client = OpenAI()
-    client = ShadowDance(client)  # ONE LINE
-    response = client.chat.completions.create(...)  # Now traced!
+    client = ShadowDance(client, run_type="llm")
+    response = client.chat.completions.create(...)  # Traced as LLM
+
+    # Robot client (tool runs)
+    client = SportClient()
+    client = ShadowDance(client, run_type="tool")
+    client.Move(0.3, 0, 0)  # Traced as tool
+
+    # With dataset logging for experiments
+    client = ShadowDance(client, run_type="tool", log_to_dataset="robot-tasks")
 """
 
 from __future__ import annotations
 
 import time
 from functools import wraps
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Literal, Optional
 
 from langsmith import trace
+from langsmith import Client as LangSmithClient
+
+RunType = Literal["tool", "chain", "llm", "retriever", "embedding", "prompt"]
 
 
 class ShadowDance:
@@ -27,30 +39,38 @@ class ShadowDance:
     Proxy wrapper for client objects that adds LangSmith tracing.
 
     Works with any client: OpenAI, Unitree robot SDKs, or custom clients.
-    Every method call becomes a traced LangSmith event.
+    Every method call becomes a traced LangSmith event with proper run type.
 
     Usage:
         from shadowdance import ShadowDance
-        
-        # OpenAI client
+
+        # OpenAI client - traced as LLM
         client = OpenAI()
-        client = ShadowDance(client)
+        client = ShadowDance(client, run_type="llm")
         response = client.chat.completions.create(...)
 
-        # Robot client
+        # Robot client - traced as tool
         client = SportClient()
-        client = ShadowDance(client)
+        client = ShadowDance(client, run_type="tool")
         client.Move(0.3, 0, 0)
+
+        # Custom client - traced as chain
+        client = CustomClient()
+        client = ShadowDance(client, run_type="chain")
     """
 
-    def __init__(self, client: Any):
+    def __init__(self, client: Any, run_type: RunType = "tool"):
         """
         Initialize the ShadowDance wrapper.
 
         Args:
-            client: The Unitree SDK client object to wrap.
+            client: The client object to wrap (OpenAI, Unitree, etc.).
+            run_type: LangSmith run type for better dashboard filtering.
+                      Options: "tool", "chain", "llm", "retriever", "embedding", "prompt"
+                      Default: "tool"
         """
         self._client = client
+        self._run_type = run_type
 
     def __getattr__(self, name: str) -> Any:
         """
@@ -89,7 +109,7 @@ class ShadowDance:
             start_time = time.perf_counter()
             result: Any = None
 
-            with trace(name=name, run_type="tool") as rt:
+            with trace(name=name, run_type=self._run_type) as rt:
                 try:
                     # Log inputs
                     input_data = {}

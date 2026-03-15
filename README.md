@@ -2,79 +2,94 @@
 <img width=250px src=https://9ol.es/tmp/shadow-logo.png>
 <br/>
 <a href=https://pypi.org/project/shadowdanc><img src=https://badge.fury.io/py/shadowdance.svg/></a>
-<br/><strong>One line. Full LangSmith observability for LLM and robot SDKs.</strong>
+<br/><strong>One line. Full LangSmith observability for robot SDKs.</strong>
 </p>
 
+## Quick Start: Robot Tracing
+
+```python
+from unitree_sdk2py.go2.sport.sport_client import SportClient
+from shadowdance import ShadowDance
+
+# Your existing robot code
+client = SportClient()
+client.Init()
+
+# ONE LINE - wrap with ShadowDance
+client = ShadowDance(client)  # <- that's all you need!
+
+# Everything else unchanged - now fully traced
+client.StandUp()
+client.Move(0.3, 0, 0)
+client.Damp()
+```
+
+Every robot command is now a traced LangSmith event with full inputs, outputs, and timing.
+
+## Connect to LLMs: Code-as-Policies
+
+Add LLM decision-making and trace the full stack (vision → planning → execution):
 
 ```python
 from shadowdance import ShadowDance
+from openai import OpenAI
 
-# OpenAI client
-client = OpenAI()
-client = ShadowDance(client)  # <- ONE LINE
-response = client.chat.completions.create(...)  # <- traced!
+# Wrap your robot (as above)
+robot = SportClient()
+robot = ShadowDance(robot, run_type="tool")
+
+# Wrap your LLM (ONE LINE)
+llm = OpenAI()
+llm = ShadowDance(llm, run_type="llm")
+
+# Simple code-as-policies: LLM generates robot commands
+task = "move forward and stop"
+prompt = f"Generate robot commands for: {task}"
+
+response = llm.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": prompt}]
+)
+
+# Execute LLM-generated commands (traced!)
+exec(response.choices[0].message.content)  # e.g., robot.Move(0.3, 0, 0)
 ```
 
-```python
-# Robot client
-client = SportClient()
-client = ShadowDance(client)  # <- ONE LINE
-client.Move(0.3, 0, 0)  # <- traced!
-```
+Now in LangSmith you see the **full chain**: LLM reasoning → generated code → robot execution.
 
-Every call is now a traced LangSmith event.
-
-## What it does
-
-`ShadowDance()` wraps any client object (OpenAI, Unitree, etc.). It intercepts every method call and logs it as a LangSmith run — command name, arguments, result, timestamp, duration. No code changes beyond the one-liner.
-
-If the client is being called from inside a LangChain agent, the traces nest automatically under the agent's run tree.
-
-## How LLM Robot Systems Work
+## Architecture
 
 Modern LLM-powered robots use a **layered architecture**:
 
 ```
 ┌─────────────────────────────────────────┐
-│  High-Level Agent (ShadowDance here!)   │
-│  "pick up the box" → coordinates layers │
+│  Your Agent Code                        │
+│  ShadowDance(agent, run_type="chain")   │
 ├─────────────────────────────────────────┤
-│  Task Planning (LLM)                    │
-│  Natural language → symbolic plan       │
+│  LLM (OpenAI, etc.)                     │
+│  ShadowDance(llm, run_type="llm")       │
+│  "pick up box" → [move, grasp, lift]    │
 ├─────────────────────────────────────────┤
-│  Perception (VLM)                       │
-│  Camera image → object positions        │
-├─────────────────────────────────────────┤
-│  Low-Level Control                      │
-│  Trajectories → motor commands          │
+│  Robot SDK (Unitree, etc.)              │
+│  ShadowDance(robot, run_type="tool")    │
+│  Move(0.3, 0, 0), StandUp(), etc.       │
 └─────────────────────────────────────────┘
 ```
 
-ShadowDance traces the **full stack** so you can debug:
-- What did the LLM plan?
-- What did the VLM see?
-- What commands were sent?
-- Where did it fail?
+Wrap each layer with ShadowDance → see the **full decision chain** in LangSmith.
 
 ## Installation
 
 ```bash
-pip install -e .
-# or
-pip install langsmith
+pip install shadowdance
 ```
 
 ## Setup
 
 ```bash
-# Install dependencies
-pip install -e .
-
-# Load environment variables
+# Load environment variables (create .env with your keys)
 source .env
 ```
-
-## Configuration
 
 The `.env` file contains:
 
@@ -105,53 +120,53 @@ Change `DEFAULT_MODEL` in `.env` to use different models:
 python examples/test_openrouter.py
 ```
 
-## Quick Start
-
-### With a Real Robot
-
-```python
-from unitree_sdk2py.go2.sport.sport_client import SportClient
-from shadowdance import ShadowDance
-
-client = SportClient()
-client.Init()
-
-# Wrap with ShadowDance
-client = ShadowDance(client)
-
-# All calls are now traced
-client.Move(0.3, 0, 0)
-```
-
-### With Virtual Robot (No Hardware Required)
-
-Test LangSmith tracing without a physical robot:
-
-```bash
-source .env
-python examples/with_virtual_robot.py
-```
-
-This runs a simulated robot that responds to commands just like a real Unitree robot. Perfect for development and testing!
-
 ## Examples
 
-### Quick Start: OpenAI Client
+### Full Demo: Code-as-Policies
 
-```python
-from openai import OpenAI
-from shadowdance import ShadowDance
-
-client = OpenAI()
-client = ShadowDance(client)  # ONE LINE
-
-response = client.chat.completions.create(
-    model="openrouter/hunter-alpha",
-    messages=[{"role": "user", "content": "Hello!"}],
-)
+```bash
+python examples/code_as_policies.py
 ```
 
-Run: `python examples/openai_client.py`
+This demonstrates the complete **Code-as-Policies** approach:
+1. **VLM** analyzes image → detects white box at [0.0, 0.1, 0.72]
+2. **LLM** generates Python code → `robot.move_to(...)`, `robot.close_gripper(...)`
+3. **Safe executor** runs code → robot picks up box
+4. **ShadowDance** traces everything → debug in LangSmith
+
+```
+Task: "Pick up the white box"
+  ↓
+Vision: white_box detected at [0.0, 0.1, 0.72]
+  ↓  
+LLM: Generates 4-line Python program
+  ↓
+Robot: move_to → close_gripper → move_to (SUCCESS)
+```
+
+### Run Types
+
+LangSmith has different run types for better dashboard filtering:
+
+| Run Type | Use Case | Example |
+|----------|----------|---------|
+| `"llm"` | LLM/VLM API calls | OpenAI, Anthropic, vision models |
+| `"tool"` | Function/tool calls | Robot commands, API wrappers |
+| `"chain"` | Orchestration logic | Agents, multi-step workflows |
+| `"retriever"` | Document retrieval | RAG systems, vector stores |
+| `"embedding"` | Embedding generation | Text embeddings |
+| `"prompt"` | Prompt formatting | Custom prompt templates |
+
+```python
+# LLM calls
+client = ShadowDance(OpenAI(), run_type="llm")
+
+# Robot/tool calls
+client = ShadowDance(SportClient(), run_type="tool")
+
+# Agent orchestration
+agent = ShadowDance(MyAgent(), run_type="chain")
+```
 
 ### Code-as-Policies (Full Demo)
 
