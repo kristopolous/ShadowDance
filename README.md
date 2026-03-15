@@ -1,6 +1,10 @@
-# ShadowDance
+<p align="center">
+<img src=https://9ol.es/tmp/shadow-logo.png>
+<br/>
+<a href=https://pypi.org/project/shadowdanc><img src=https://badge.fury.io/py/shadowdance.svg/></a>
+<br/><strong>One line. Full LangSmith observability for LLM and robot SDKs.</strong>
+</p>
 
-One line. Full LangSmith observability for LLM and robot SDKs.
 
 ```python
 from shadowdance import ShadowDance
