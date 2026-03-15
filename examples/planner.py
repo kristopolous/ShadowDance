@@ -144,9 +144,9 @@ class TaskPlanner:
     def _real_plan(self, task: str, context: dict) -> ManipulationPlan:
         """Generate a real plan using an LLM via OpenRouter."""
         import httpx
-        
+
         print(f"  [Planner] Generating plan for: '{task}' using {self.model}")
-        
+
         # Build object context
         objects_info = []
         for obj in context.get("detected_objects", []):
@@ -155,7 +155,7 @@ class TaskPlanner:
                 "position_3d": obj.position_3d,
                 "confidence": obj.confidence,
             })
-        
+
         # Prompt for planning
         prompt = f"""You are a robot manipulation planner. Generate a step-by-step plan for the task.
 
@@ -179,12 +179,15 @@ Respond in JSON format:
   ],
   "success_criteria": "..."
 }}"""
-        
+
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
+            # OpenRouter headers for pricing/cost tracking
+            "HTTP-Referer": "https://github.com/kristopolous/ShadowDance",
+            "X-Title": "ShadowDance",
         }
-        
+
         payload = {
             "model": self.model,
             "messages": [
@@ -192,14 +195,23 @@ Respond in JSON format:
             ],
             "max_tokens": 1000,
         }
-        
+
         url = f"{self._api_base}/chat/completions"
-        
+
         try:
             with httpx.Client() as client:
                 response = client.post(url, headers=headers, json=payload, timeout=30.0)
                 response.raise_for_status()
                 result = response.json()
+            
+            # Extract usage stats for LangSmith pricing
+            usage = result.get("usage", {})
+            prompt_tokens = usage.get("prompt_tokens", 0)
+            completion_tokens = usage.get("completion_tokens", 0)
+            total_tokens = usage.get("total_tokens", 0)
+            
+            print(f"  [Planner] Tokens: {prompt_tokens} in, {completion_tokens} out, {total_tokens} total")
+            print(f"  [Planner] Model: {self.model} (${0.05}/M in, ${0.15}/M out)")
             
             content = result["choices"][0]["message"]["content"]
             

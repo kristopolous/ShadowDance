@@ -47,33 +47,35 @@ class VisionSystem:
         self._api_key = os.environ.get("OPENAI_API_KEY")
         self._api_base = os.environ.get("OPENAI_BASE_URL") or os.environ.get("OPENAI_API_BASE")
     
-    def detect_objects(self, image_path: str) -> list[DetectedObject]:
+    def detect_objects(self, image_path: str, task: str = "") -> list[DetectedObject]:
         """
         Detect objects in an image.
         
         Args:
             image_path: Path to the image file.
+            task: Optional task description for context.
             
         Returns:
             List of detected objects with positions.
         """
-        if self.model == "mock":
-            return self._mock_detect(image_path)
+        if self.model == "mock" or not self._api_key:
+            return self._mock_detect(image_path, task)
         else:
-            return self._real_detect(image_path)
+            return self._real_detect(image_path, task)
     
-    def _mock_detect(self, image_path: str) -> list[DetectedObject]:
+    def _mock_detect(self, image_path: str, task: str = "") -> list[DetectedObject]:
         """Mock detection returning pre-defined results."""
         print(f"  [Vision] Mock detection on: {image_path}")
-        
+
         # Simulate detecting a box on a table
         return [
             DetectedObject(
                 name="white_box",
                 confidence=0.95,
                 bounding_box=(80, 40, 100, 120),  # Approximate box location
-                position_3d=(0.3, 0.0, -0.15),  # 30cm forward, 15cm below camera
-                orientation=(0, 0.1, 0),  # Slight tilt
+                position_3d=(0.3, 0.0, 0.70),  # 30cm forward on table
+                size=[0.08, 0.05, 0.15],  # 8x5x15 cm box
+                grasp_point=[0.30, 0.0, 0.78],  # Where to grasp
             ),
             DetectedObject(
                 name="table_surface",
@@ -83,13 +85,13 @@ class VisionSystem:
                 orientation=(0, 0, 0),
             ),
         ]
-    
+
     def _encode_image(self, image_path: str) -> str:
         """Encode image to base64."""
         with open(image_path, "rb") as f:
             return base64.b64encode(f.read()).decode("utf-8")
-    
-    def _real_detect(self, image_path: str) -> list[DetectedObject]:
+
+    def _real_detect(self, image_path: str, task: str = "") -> list[DetectedObject]:
         """Real detection using OpenAI-compatible API."""
         import httpx
         
@@ -102,8 +104,11 @@ class VisionSystem:
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
+            # OpenRouter headers for pricing/cost tracking
+            "HTTP-Referer": "https://github.com/kristopolous/ShadowDance",
+            "X-Title": "ShadowDance",
         }
-        
+
         # Prompt for object detection
         prompt = """Analyze this image and identify all objects that could be manipulated by a robot.
 For each object, provide:
@@ -117,7 +122,7 @@ Respond in JSON format:
     {"name": "...", "bbox": [x, y, w, h], "position_3d": [x, y, z], "confidence": 0.0-1.0}
   ]
 }"""
-        
+
         payload = {
             "model": self.model,
             "messages": [
@@ -136,15 +141,24 @@ Respond in JSON format:
             ],
             "max_tokens": 1000,
         }
-        
+
         # Make the request
         url = f"{self._api_base}/chat/completions"
-        
+
         with httpx.Client() as client:
             response = client.post(url, headers=headers, json=payload, timeout=30.0)
             response.raise_for_status()
             result = response.json()
+
+        # Extract usage stats for LangSmith pricing
+        usage = result.get("usage", {})
+        prompt_tokens = usage.get("prompt_tokens", 0)
+        completion_tokens = usage.get("completion_tokens", 0)
+        total_tokens = usage.get("total_tokens", 0)
         
+        print(f"  [Vision] Tokens: {prompt_tokens} in, {completion_tokens} out, {total_tokens} total")
+        print(f"  [Vision] Model: {self.model} (${0.05}/M in, ${0.15}/M out)")
+
         # Parse response
         content = result["choices"][0]["message"]["content"]
         
