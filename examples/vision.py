@@ -124,12 +124,6 @@ class VisionSystem:
             "HTTP-Referer": "https://github.com/kristopolous/ShadowDance",
             "X-Title": "ShadowDance",
         }
-        
-        # Qwen 3.5 9B pricing: $0.05/M input, $0.15/M output
-        PRICING = {
-            "qwen/qwen3.5-9b": {"input": 0.05 / 1_000_000, "output": 0.15 / 1_000_000},
-        }
-        pricing = PRICING.get(self._model, {"input": 0.05 / 1_000_000, "output": 0.15 / 1_000_000})
 
         # Prompt for object detection
         prompt = """Analyze this image and identify all objects that could be manipulated by a robot.
@@ -172,32 +166,43 @@ Respond in JSON format:
             response.raise_for_status()
             result = response.json()
 
-        # Extract usage stats for LangSmith pricing
+        # Extract usage stats from OpenRouter response
         usage = result.get("usage", {})
         prompt_tokens = usage.get("prompt_tokens", 0)
         completion_tokens = usage.get("completion_tokens", 0)
         total_tokens = usage.get("total_tokens", 0)
         
-        # Calculate costs
-        input_cost = prompt_tokens * pricing["input"]
-        output_cost = completion_tokens * pricing["output"]
+        # Get cost from OpenRouter (they provide it directly!)
+        cost = usage.get("cost", 0)  # Cost in USD
         
         print(f"  [Vision] Tokens: {prompt_tokens} in, {completion_tokens} out, {total_tokens} total")
-        print(f"  [Vision] Cost: ${input_cost:.6f} input + ${output_cost:.6f} output = ${input_cost + output_cost:.6f}")
+        print(f"  [Vision] Cost: ${cost:.6f}")
 
         # Log usage to LangSmith
         try:
             run = get_current_run_tree()
             if run:
-                run.set(
-                    usage_metadata={
-                        "input_tokens": prompt_tokens,
-                        "output_tokens": completion_tokens,
-                        "total_tokens": total_tokens,
-                        "input_cost": input_cost,
-                        "output_cost": output_cost,
-                    }
-                )
+                # Build usage metadata in LangSmith format
+                usage_metadata = {
+                    "input_tokens": prompt_tokens,
+                    "output_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                }
+                
+                # Include cost if available
+                if cost > 0:
+                    usage_metadata["output_cost"] = cost
+                
+                # Include token details if available
+                if "prompt_tokens_details" in usage:
+                    details = usage["prompt_tokens_details"]
+                    usage_metadata["input_token_details"] = details
+                
+                if "completion_tokens_details" in usage:
+                    details = usage["completion_tokens_details"]
+                    usage_metadata["output_token_details"] = details
+                
+                run.set(usage_metadata=usage_metadata)
                 print(f"  [Vision] ✓ Logged usage to LangSmith")
         except Exception as e:
             print(f"  [Vision] Warning: Could not log usage to LangSmith: {e}")

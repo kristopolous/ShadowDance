@@ -57,8 +57,6 @@ class MockSportClient:
 
 def main():
     """Demonstrate ShadowDance basic usage."""
-    # Disable actual tracing for this demo
-    os.environ["LANGCHAIN_TRACING_V2"] = "false"
 
     # Create the client
     client = MockSportClient()

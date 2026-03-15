@@ -8,27 +8,28 @@ timestamp, and duration.
 Usage:
     from shadowdance import ShadowDance, task
     
-    # Option 1: Wrap clients directly
+    # OpenAI client (LLM runs)
     client = OpenAI()
     client = ShadowDance(client, run_type="llm")
-    response = client.chat.completions.create(...)  # Traced as LLM
+    response = client.chat.completions.create(...)
 
-    # Option 2: Use task decorator for parent runs
+    # Robot client (tool runs)
+    client = SportClient()
+    client = ShadowDance(client, run_type="tool")
+    client.Move(0.3, 0, 0)
+
+    # With task decorator for nesting
     @task("pick_up_box")
     def my_task():
-        robot = ShadowDance(SportClient(), run_type="tool")
+        robot = ShadowDance(SportClient())
         robot.Move(0.3, 0, 0)  # Nested under "pick_up_box"
-    
-    # Option 3: Specify parent run manually
-    robot = ShadowDance(SportClient(), parent_run="my_task")
-    robot.Move(0.3, 0, 0)  # Nested under "my_task"
 """
 
 from __future__ import annotations
 
 import time
 from functools import wraps
-from typing import Any, Callable, Literal, Optional
+from typing import Any, Callable, Literal, Optional, Tuple
 from contextlib import contextmanager
 
 from langsmith import trace
@@ -65,7 +66,6 @@ def task(name: str, run_type: RunType = "chain", **kwargs):
         @wraps(func)
         def wrapper(*args, **func_kwargs):
             with trace(name=name, run_type=run_type, **kwargs) as rt:
-                # Store run info for child traces to find
                 rt.metadata.update({
                     "function": func.__name__,
                     "args": args,
@@ -112,6 +112,9 @@ class ShadowDance:
     
     Optionally logs to datasets for experiments and evaluation.
     Automatically nests under parent runs created by @task decorator or task_context.
+    
+    Subclasses can override get_token_count() and get_cost() for provider-specific
+    usage tracking.
 
     Usage:
         from shadowdance import ShadowDance, task
@@ -168,7 +171,6 @@ class ShadowDance:
         if log_to_dataset:
             try:
                 self._ls_client = LangSmithClient()
-                # Create dataset if it doesn't exist
                 try:
                     self._ls_client.read_dataset(dataset_name=log_to_dataset)
                 except Exception:
@@ -189,15 +191,47 @@ class ShadowDance:
         2. Auto-detect from current trace context (@task decorator)
         3. None (no nesting)
         """
-        # If explicit parent run name specified
         if self._parent_run_name:
-            # Try to find by name in current context
-            # For now, just return None and let user use @task decorator
-            # Future: could look up by name from a registry
             return None
-        
-        # Auto-detect from current trace context
         return get_parent_run()
+
+    def get_token_count(self, request: Any, response: Any) -> Optional[dict]:
+        """
+        Extract token count from API request/response.
+        
+        Override this method in subclasses to extract provider-specific
+        token usage information.
+        
+        Args:
+            request: The request object/dict sent to the API
+            response: The response object from the API
+            
+        Returns:
+            Dict with token counts or None if not available:
+            {
+                "input_tokens": int,
+                "output_tokens": int,
+                "total_tokens": int,
+            }
+        """
+        pass
+
+    def get_cost(self) -> Optional[dict]:
+        """
+        Calculate cost for the API call.
+        
+        Override this method in subclasses to calculate provider-specific
+        pricing based on token usage and model pricing.
+        
+        Returns:
+            Dict with cost information or None if not available:
+            {
+                "input_cost": float,
+                "output_cost": float,
+                "total_cost": float,
+            }
+        """
+        pass
 
     def __getattr__(self, name: str) -> Any:
         """
@@ -240,12 +274,10 @@ class ShadowDance:
             result: Any = None
             error: Optional[Exception] = None
             
-            # Get parent run for nesting
             parent = self._get_parent_run()
 
             with trace(name=name, run_type=self._run_type, parent=parent) as rt:
                 try:
-                    # Log inputs
                     input_data = {}
                     if args:
                         input_data["args"] = args
@@ -253,13 +285,20 @@ class ShadowDance:
                         input_data["kwargs"] = kwargs
                     rt.add_inputs(input_data)
 
-                    # Execute the method
                     result = method(*args, **kwargs)
 
-                    # Log outputs
                     rt.add_outputs({"result": result})
 
-                    # Log to dataset if configured
+                    # Extract and log token usage if available
+                    token_usage = self.get_token_count(kwargs, result)
+                    if token_usage:
+                        rt.add_metadata({"token_usage": token_usage})
+                    
+                    # Extract and log cost if available
+                    cost = self.get_cost()
+                    if cost:
+                        rt.add_metadata({"cost": cost})
+
                     if self._log_to_dataset and self._ls_client:
                         try:
                             self._ls_client.create_example(
@@ -272,18 +311,15 @@ class ShadowDance:
                                     "success": True,
                                 },
                             )
-                        except Exception as ds_error:
-                            # Silently ignore dataset logging errors
+                        except Exception:
                             pass
 
                     return result
 
                 except Exception as e:
                     error = e
-                    # Log exception
                     rt.add_event({"name": "error", "data": {"error": str(e)}})
                     
-                    # Log failure to dataset
                     if self._log_to_dataset and self._ls_client:
                         try:
                             self._ls_client.create_example(
@@ -303,19 +339,13 @@ class ShadowDance:
 
                 finally:
                     elapsed_ms = (time.perf_counter() - start_time) * 1000
-                    # Duration is automatically tracked by LangSmith via latency property
                     rt.add_metadata({"duration_ms": elapsed_ms})
 
         return traced
 
     def __repr__(self) -> str:
-        """Return a string representation of the ShadowDance wrapper."""
         return f"ShadowDance({self._client!r})"
 
-
-# ============================================================================
-# Exports
-# ============================================================================
 
 __all__ = [
     "ShadowDance",
