@@ -1,0 +1,9 @@
+# ShadowDance - LangSmith observability for Unitree robot SDKs
+
+# Core dependencies
+langsmith>=0.1.0
+
+# Development dependencies (optional)
+# pytest>=7.0.0
+# ruff>=0.1.0
+# mypy>=1.0.0

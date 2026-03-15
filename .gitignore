@@ -1,3 +1,6 @@
 __pycache__
 unitree_sdk2_python/
 langchain/
+langsmith
+.env
+*/.env
