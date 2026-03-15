@@ -1,7 +1,7 @@
 <p align="center">
 <img width=250px src=https://9ol.es/tmp/shadow-logo.png>
 <br/>
-<a href=https://pypi.org/project/shadowdanc><img src=https://badge.fury.io/py/shadowdance.svg/></a>
+<a href=https://pypi.org/project/shadowdance><img src=https://badge.fury.io/py/shadowdance.svg/></a>
 <br/><strong>One line. Full LangSmith observability for robot SDKs.</strong>
 </p>
 
