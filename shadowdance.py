@@ -236,24 +236,42 @@ class ShadowDance:
                     # Log outputs
                     rt.add_outputs({"result": result})
 
-                    # Extract and log token usage (if subclass provides it)
+                    # Extract token usage and cost (if subclass provides them)
                     token_usage = self.get_token_count(kwargs, result)
-                    if token_usage:
-                        rt.add_metadata({"token_usage": token_usage})
-                    
-                    # Extract and log cost (if subclass provides it)
                     cost = self.get_cost(kwargs, result)
+                    
+                    # Build usage_metadata in LangSmith format
+                    usage_metadata = {}
+                    if token_usage:
+                        usage_metadata["input_tokens"] = token_usage.get("input_tokens", 0)
+                        usage_metadata["output_tokens"] = token_usage.get("output_tokens", 0)
+                        usage_metadata["total_tokens"] = token_usage.get("total_tokens", 0)
                     if cost:
-                        rt.add_metadata({"cost": cost})
+                        usage_metadata["input_cost"] = cost.get("input_cost", 0)
+                        usage_metadata["output_cost"] = cost.get("output_cost", 0)
+                    
+                    # Log usage to trace if available
+                    if usage_metadata:
+                        rt.set(usage_metadata=usage_metadata)
 
                     # Log to dataset if configured
                     if self._log_to_dataset and self._ls_client:
                         try:
+                            # Build metadata for dataset example
+                            example_metadata = {
+                                "method": name,
+                                "run_type": self._run_type,
+                            }
+                            if token_usage:
+                                example_metadata["token_usage"] = token_usage
+                            if cost:
+                                example_metadata["cost"] = cost
+                            
                             self._ls_client.create_example(
                                 inputs=input_data,
                                 outputs={"result": result},
                                 dataset_name=self._log_to_dataset,
-                                metadata={"method": name, "run_type": self._run_type},
+                                metadata=example_metadata,
                             )
                         except Exception:
                             pass
