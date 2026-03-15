@@ -249,10 +249,17 @@ class ShadowDance:
                     if cost:
                         usage_metadata["input_cost"] = cost.get("input_cost", 0)
                         usage_metadata["output_cost"] = cost.get("output_cost", 0)
+                        usage_metadata["total_cost"] = cost.get("total_cost", 0)
                     
                     # Log usage to trace if available
                     if usage_metadata:
                         rt.set(usage_metadata=usage_metadata)
+                    
+                    # Set model metadata for cost calculation display
+                    if hasattr(self, '_model') and self._model:
+                        rt.metadata["ls_model_name"] = self._model
+                    if self._run_type == "llm":
+                        rt.metadata["ls_provider"] = "openrouter"
 
                     # Log to dataset if configured
                     if self._log_to_dataset and self._ls_client:
