@@ -8,8 +8,9 @@ timestamp, and duration.
 
 from __future__ import annotations
 
+import time
 from functools import wraps
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from langsmith import trace
 
@@ -69,20 +70,36 @@ class ShadowDance:
 
         @wraps(method)
         def traced(*args: Any, **kwargs: Any) -> Any:
-            with trace(name=name) as rt:
-                # Log inputs
-                if args:
-                    rt.set_input({"args": args, "kwargs": kwargs})
-                elif kwargs:
-                    rt.set_input({"kwargs": kwargs})
-                else:
-                    rt.set_input({})
+            start_time = time.perf_counter()
+            result: Any = None
 
-                # Execute the method and log output
-                result = method(*args, **kwargs)
-                rt.set_output({"result": result})
+            with trace(name=name, run_type="tool") as rt:
+                try:
+                    # Log inputs
+                    input_data = {}
+                    if args:
+                        input_data["args"] = args
+                    if kwargs:
+                        input_data["kwargs"] = kwargs
+                    rt.add_inputs(input_data)
 
-                return result
+                    # Execute the method
+                    result = method(*args, **kwargs)
+
+                    # Log outputs
+                    rt.add_outputs({"result": result})
+
+                    return result
+
+                except Exception as e:
+                    # Log exception
+                    rt.add_event({"name": "error", "data": {"error": str(e)}})
+                    raise
+
+                finally:
+                    elapsed_ms = (time.perf_counter() - start_time) * 1000
+                    # Duration is automatically tracked by LangSmith via latency property
+                    rt.add_metadata({"duration_ms": elapsed_ms})
 
         return traced
 

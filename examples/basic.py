@@ -13,7 +13,7 @@ Usage:
 
 import os
 
-from qwen import ShadowDance
+from shadowdance import ShadowDance
 
 
 class MockSportClient:
