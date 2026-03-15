@@ -5,3 +5,5 @@ langsmith
 .env
 */.env
 openrouter.key
+output.log
+dist

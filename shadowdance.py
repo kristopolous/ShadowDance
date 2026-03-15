@@ -1,9 +1,16 @@
 """
-ShadowDance - LangSmith observability for Unitree robot SDKs.
+ShadowDance - LangSmith observability for LLM and robot SDKs.
 
-Wraps any Unitree SDK client object and intercepts method calls,
+Wraps any client object (OpenAI, Unitree, etc.) and intercepts method calls,
 logging them as LangSmith runs with command name, arguments, result,
 timestamp, and duration.
+
+Usage:
+    from shadowdance import ShadowDance
+    
+    client = OpenAI()
+    client = ShadowDance(client)  # ONE LINE
+    response = client.chat.completions.create(...)  # Now traced!
 """
 
 from __future__ import annotations
@@ -17,14 +24,23 @@ from langsmith import trace
 
 class ShadowDance:
     """
-    Proxy wrapper for Unitree SDK clients that adds LangSmith tracing.
+    Proxy wrapper for client objects that adds LangSmith tracing.
+
+    Works with any client: OpenAI, Unitree robot SDKs, or custom clients.
+    Every method call becomes a traced LangSmith event.
 
     Usage:
-        client = LocoClient()
-        client = ShadowDance(client)  # <- add this
-        client.Move(0.3, 0, 0)        # <- everything else unchanged
+        from shadowdance import ShadowDance
+        
+        # OpenAI client
+        client = OpenAI()
+        client = ShadowDance(client)
+        response = client.chat.completions.create(...)
 
-    Every method call is now a traced LangSmith event.
+        # Robot client
+        client = SportClient()
+        client = ShadowDance(client)
+        client.Move(0.3, 0, 0)
     """
 
     def __init__(self, client: Any):

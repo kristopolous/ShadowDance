@@ -1,22 +1,56 @@
 # ShadowDance
 
-One line. Full LangSmith observability for Unitree robot SDKs.
+One line. Full LangSmith observability for LLM and robot SDKs.
 
 ```python
 from shadowdance import ShadowDance
 
-client = LocoClient()
-client = ShadowDance(client)  # <- add this
-client.Move(0.3, 0, 0)        # <- everything else unchanged
+# OpenAI client
+client = OpenAI()
+client = ShadowDance(client)  # <- ONE LINE
+response = client.chat.completions.create(...)  # <- traced!
 ```
 
-Every method call is now a traced LangSmith event. See what your robot did, when, and why.
+```python
+# Robot client
+client = SportClient()
+client = ShadowDance(client)  # <- ONE LINE
+client.Move(0.3, 0, 0)  # <- traced!
+```
+
+Every call is now a traced LangSmith event.
 
 ## What it does
 
-`ShadowDance()` wraps any Unitree SDK client object. It intercepts every method call and logs it as a LangSmith run — command name, arguments, result, timestamp, duration. No code changes beyond the one-liner.
+`ShadowDance()` wraps any client object (OpenAI, Unitree, etc.). It intercepts every method call and logs it as a LangSmith run — command name, arguments, result, timestamp, duration. No code changes beyond the one-liner.
 
-If the client is being called from inside a LangChain agent, the traces nest automatically under the agent's run tree. You get the full decision chain: agent reasoning → tool call → robot command.
+If the client is being called from inside a LangChain agent, the traces nest automatically under the agent's run tree.
+
+## How LLM Robot Systems Work
+
+Modern LLM-powered robots use a **layered architecture**:
+
+```
+┌─────────────────────────────────────────┐
+│  High-Level Agent (ShadowDance here!)   │
+│  "pick up the box" → coordinates layers │
+├─────────────────────────────────────────┤
+│  Task Planning (LLM)                    │
+│  Natural language → symbolic plan       │
+├─────────────────────────────────────────┤
+│  Perception (VLM)                       │
+│  Camera image → object positions        │
+├─────────────────────────────────────────┤
+│  Low-Level Control                      │
+│  Trajectories → motor commands          │
+└─────────────────────────────────────────┘
+```
+
+ShadowDance traces the **full stack** so you can debug:
+- What did the LLM plan?
+- What did the VLM see?
+- What commands were sent?
+- Where did it fail?
 
 ## Installation
 
@@ -29,13 +63,42 @@ pip install langsmith
 ## Setup
 
 ```bash
+# Install dependencies
+pip install -e .
+
 # Load environment variables
 source .env
+```
 
-# Or set manually
-export LANGCHAIN_API_KEY=your_key
-export LANGCHAIN_TRACING_V2=true
-export LANGCHAIN_PROJECT=unitree-demo
+## Configuration
+
+The `.env` file contains:
+
+```bash
+# LangSmith tracing
+LANGCHAIN_API_KEY=...
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_PROJECT=shadowdance
+
+# OpenRouter (OpenAI-compatible API)
+OPENAI_API_KEY=...
+OPENAI_BASE_URL=https://openrouter.ai/api/v1
+
+# Default model for vision and planning
+DEFAULT_MODEL=openrouter/hunter-alpha
+```
+
+### Using Different Models
+
+Change `DEFAULT_MODEL` in `.env` to use different models:
+
+- **Vision + Text**: `openrouter/hunter-alpha` (multimodal)
+- **Free models**: See [OpenRouter's model list](https://openrouter.ai/models)
+
+### Test Connection
+
+```bash
+python examples/test_openrouter.py
 ```
 
 ## Quick Start
@@ -69,26 +132,46 @@ This runs a simulated robot that responds to commands just like a real Unitree r
 
 ## Examples
 
-| Example | Description |
-|---------|-------------|
-| `examples/basic.py` | Basic usage with mock client |
-| `examples/error_handling.py` | How exceptions are traced |
-| `examples/with_virtual_robot.py` | Full demo with virtual robot + LangSmith |
-| `examples/pick_up_box.py` | **Full stack**: Vision → Planning → Robot control |
+### Quick Start: OpenAI Client
 
-### Full Stack Demo: Pick Up Box
+```python
+from openai import OpenAI
+from shadowdance import ShadowDance
 
-The `pick_up_box.py` demo shows complete observability across your robot stack:
+client = OpenAI()
+client = ShadowDance(client)  # ONE LINE
 
-```
-Vision (detect box)
-   ↓
-Planning (LLM generates plan)
-   ↓  
-Execution (robot control)
+response = client.chat.completions.create(
+    model="openrouter/hunter-alpha",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
 ```
 
-All traced in LangSmith with nested runs showing the full decision chain.
+Run: `python examples/openai_client.py`
+
+### Code-as-Policies (Full Demo)
+
+Modern LLM robot architecture: VLM → LLM → Code → Robot
+
+```bash
+python examples/code_as_policies.py
+```
+
+This demonstrates the **Code-as-Policies** approach:
+1. **VLM** analyzes image → detects white box at [0.0, 0.1, 0.72]
+2. **LLM** generates Python code → `robot.move_to(...)`, `robot.close_gripper(...)`
+3. **Safe executor** runs code → robot picks up box
+4. **ShadowDance** traces everything → debug in LangSmith
+
+```
+Task: "Pick up the white box"
+  ↓
+Vision: white_box detected at [0.0, 0.1, 0.72]
+  ↓  
+LLM: Generates 4-line Python program
+  ↓
+Robot: move_to → close_gripper → move_to (SUCCESS)
+```
 
 ## Example output in LangSmith
 

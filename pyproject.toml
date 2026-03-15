@@ -1,24 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "shadowdance"
 version = "0.1.0"
-description = "LangSmith observability for Unitree robot SDKs"
+description = "LangSmith observability for LLM and robot SDKs"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "ShadowDance Contributors"}
+    {name = "ShadowDance Contributors", email = "shadowdance@example.com"}
 ]
-keywords = ["langsmith", "unitree", "robotics", "observability", "tracing"]
+maintainers = [
+    {name = "ShadowDance Contributors", email = "shadowdance@example.com"}
+]
+keywords = [
+    "langsmith",
+    "llm",
+    "robotics",
+    "observability",
+    "tracing",
+    "debugging",
+    "openai",
+    "unitree",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Distributed Computing",
 ]
 
 dependencies = [
@@ -28,23 +46,25 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+openai = [
+    "openai>=1.0.0",
+]
 dev = [
     "pytest>=7.0.0",
     "ruff>=0.1.0",
     "mypy>=1.0.0",
+    "openai>=1.0.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/langchain-ai/langchain"
-Repository = "https://github.com/langchain-ai/langchain"
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+Homepage = "https://github.com/kristopolous/ShadowDance"
+Documentation = "https://github.com/kristopolous/ShadowDance#readme"
+Repository = "https://github.com/kristopolous/ShadowDance.git"
+Issues = "https://github.com/kristopolous/ShadowDance/issues"
+Changelog = "https://github.com/kristopolous/ShadowDance/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
-packages = ["."]
-include = ["shadowdance.py"]
+only-include = ["shadowdance.py"]
 
 [tool.ruff]
 line-length = 88
