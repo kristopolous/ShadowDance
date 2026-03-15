@@ -105,8 +105,9 @@ class VisionSystem:
     def _real_detect(self, image_path: str, task: str = "") -> list[DetectedObject]:
         """Real detection using OpenAI-compatible API."""
         import httpx
+        from langsmith import get_current_run_tree
         
-        print(f"  [Vision] Real detection on: {image_path} using {self.model}")
+        print(f"  [Vision] Real detection on: {image_path} using {self._model}")
         print(f"  [Vision] API Key set: {bool(self._api_key)}, Base URL: {self._api_base}")
 
         # Encode image
@@ -123,6 +124,12 @@ class VisionSystem:
             "HTTP-Referer": "https://github.com/kristopolous/ShadowDance",
             "X-Title": "ShadowDance",
         }
+        
+        # Qwen 3.5 9B pricing: $0.05/M input, $0.15/M output
+        PRICING = {
+            "qwen/qwen3.5-9b": {"input": 0.05 / 1_000_000, "output": 0.15 / 1_000_000},
+        }
+        pricing = PRICING.get(self._model, {"input": 0.05 / 1_000_000, "output": 0.15 / 1_000_000})
 
         # Prompt for object detection
         prompt = """Analyze this image and identify all objects that could be manipulated by a robot.
@@ -171,8 +178,29 @@ Respond in JSON format:
         completion_tokens = usage.get("completion_tokens", 0)
         total_tokens = usage.get("total_tokens", 0)
         
+        # Calculate costs
+        input_cost = prompt_tokens * pricing["input"]
+        output_cost = completion_tokens * pricing["output"]
+        
         print(f"  [Vision] Tokens: {prompt_tokens} in, {completion_tokens} out, {total_tokens} total")
-        print(f"  [Vision] Model: {self.model} (${0.05}/M in, ${0.15}/M out)")
+        print(f"  [Vision] Cost: ${input_cost:.6f} input + ${output_cost:.6f} output = ${input_cost + output_cost:.6f}")
+
+        # Log usage to LangSmith
+        try:
+            run = get_current_run_tree()
+            if run:
+                run.set(
+                    usage_metadata={
+                        "input_tokens": prompt_tokens,
+                        "output_tokens": completion_tokens,
+                        "total_tokens": total_tokens,
+                        "input_cost": input_cost,
+                        "output_cost": output_cost,
+                    }
+                )
+                print(f"  [Vision] ✓ Logged usage to LangSmith")
+        except Exception as e:
+            print(f"  [Vision] Warning: Could not log usage to LangSmith: {e}")
 
         # Parse response
         content = result["choices"][0]["message"]["content"]

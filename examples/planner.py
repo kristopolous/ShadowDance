@@ -144,6 +144,7 @@ class TaskPlanner:
     def _real_plan(self, task: str, context: dict) -> ManipulationPlan:
         """Generate a real plan using an LLM via OpenRouter."""
         import httpx
+        from langsmith import get_current_run_tree
 
         print(f"  [Planner] Generating plan for: '{task}' using {self.model}")
 
@@ -180,6 +181,12 @@ Respond in JSON format:
   "success_criteria": "..."
 }}"""
 
+        # Qwen 3.5 9B pricing: $0.05/M input, $0.15/M output
+        PRICING = {
+            "qwen/qwen3.5-9b": {"input": 0.05 / 1_000_000, "output": 0.15 / 1_000_000},
+        }
+        pricing = PRICING.get(self._model, {"input": 0.05 / 1_000_000, "output": 0.15 / 1_000_000})
+
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
@@ -210,8 +217,29 @@ Respond in JSON format:
             completion_tokens = usage.get("completion_tokens", 0)
             total_tokens = usage.get("total_tokens", 0)
             
+            # Calculate costs
+            input_cost = prompt_tokens * pricing["input"]
+            output_cost = completion_tokens * pricing["output"]
+            
             print(f"  [Planner] Tokens: {prompt_tokens} in, {completion_tokens} out, {total_tokens} total")
-            print(f"  [Planner] Model: {self.model} (${0.05}/M in, ${0.15}/M out)")
+            print(f"  [Planner] Cost: ${input_cost:.6f} input + ${output_cost:.6f} output = ${input_cost + output_cost:.6f}")
+            
+            # Log usage to LangSmith
+            try:
+                run = get_current_run_tree()
+                if run:
+                    run.set(
+                        usage_metadata={
+                            "input_tokens": prompt_tokens,
+                            "output_tokens": completion_tokens,
+                            "total_tokens": total_tokens,
+                            "input_cost": input_cost,
+                            "output_cost": output_cost,
+                        }
+                    )
+                    print(f"  [Planner] ✓ Logged usage to LangSmith")
+            except Exception as e:
+                print(f"  [Planner] Warning: Could not log usage to LangSmith: {e}")
             
             content = result["choices"][0]["message"]["content"]
             

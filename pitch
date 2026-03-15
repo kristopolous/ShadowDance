@@ -1,1 +1,10 @@
-I extended industry standard LLM observability and logging tools to support unitree robots so that you can drill down any robotic task start to finish. With ShadowDance, which is now in pypi, A single line of code will make your robot actions and decisions surface as a set of tool calls.
+When your robot does something unexpected, you have no idea why. Was it the vision model? The planner? A bad command? There's no way to know. ShadowDance fixes that. Just because the robot drops the ball, doesn't mean you have to as well
+
+To get a clear idea of what's going on we need a unified dashboard to see LLM inference calls, how they affect robotic movements and what those robotic movements are.
+
+To accomplish this, ShadowDance, which is now in PyPi, wraps Langsmith observability and logging tooling to support unitree robots. 
+A single line of code will enable drill downs of every robotic action start to finish.
+
+This means every call from the cloud to the claw is logged and organized.
+
+You get monitoring, alerts, and even cost tracking for all your robotic operations.
