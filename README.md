@@ -262,6 +262,39 @@ move_to_kitchen (chain)
 python examples/nested_tracing.py
 ```
 
+## Demo
+
+### Investor Demo
+
+For a polished demonstration showing the full capabilities:
+
+```bash
+python examples/investor_demo.py
+```
+
+This creates **beautiful, organized traces** showing:
+- 📦 **Warehouse Automation** - Pick and place with perception → planning → execution
+- 🔍 **Quality Inspection** - Multi-point inspection with detailed tracking
+- 🚨 **Safety Systems** - Emergency response with critical event logging
+
+**Perfect for showing investors:**
+1. Run the demo
+2. Open https://smith.langchain.com
+3. Project: `shadowdance-demo`
+4. Watch traces appear in real-time
+
+Each task shows clear hierarchy:
+```
+warehouse_pick_and_place (chain)
+├── perception_phase (vision)
+├── planning_phase (llm)
+├── execution_phase (control)
+│   ├── StandUp (tool)
+│   ├── Move (tool) ×5
+│   └── Damp (tool)
+└── return_phase (control)
+```
+
 ### Code-as-Policies (Full Demo)
 
 Modern LLM robot architecture: VLM → LLM → Code → Robot
