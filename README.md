@@ -168,6 +168,38 @@ client = ShadowDance(SportClient(), run_type="tool")
 agent = ShadowDance(MyAgent(), run_type="chain")
 ```
 
+## Datasets & Experiments
+
+Use ShadowDance with LangSmith datasets for **robot evaluation and regression testing**:
+
+```python
+from shadowdance import ShadowDance
+
+# Log all executions to a dataset
+robot = ShadowDance(
+    SportClient(), 
+    run_type="tool", 
+    log_to_dataset="robot-tasks"  # Creates dataset automatically
+)
+
+# Every command is logged as an example
+robot.StandUp()      # ✓ Logged with inputs, outputs, success
+robot.Move(0.3, 0, 0)  # ✓ Logged with duration, result
+```
+
+**In LangSmith:**
+1. Go to **Datasets & Experiments** tab
+2. Find `robot-tasks` dataset with all executions
+3. Create experiments to compare robot versions
+4. Run regression tests on code changes
+
+**Example: Evaluate robot configurations**
+```bash
+python examples/robot_evaluation.py
+```
+
+This creates datasets (`robot-eval-v1`, `robot-eval-v2`) and compares task success rates across configurations.
+
 ### Code-as-Policies (Full Demo)
 
 Modern LLM robot architecture: VLM → LLM → Code → Robot
