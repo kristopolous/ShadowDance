@@ -200,6 +200,68 @@ python examples/robot_evaluation.py
 
 This creates datasets (`robot-eval-v1`, `robot-eval-v2`) and compares task success rates across configurations.
 
+## Nested Tracing
+
+Organize robot primitives under **task runs** for better visibility:
+
+### Option 1: `@task` Decorator (Recommended)
+
+```python
+from shadowdance import ShadowDance, task
+
+@task("pick_up_box")  # Creates parent run
+def pick_up_box():
+    robot = ShadowDance(SportClient())
+    robot.StandUp()     # Nested under "pick_up_box"
+    robot.Move(0.3, 0, 0)  # Nested
+    robot.Damp()        # Nested
+
+pick_up_box()
+```
+
+### Option 2: `task_context` Manager
+
+```python
+from shadowdance import ShadowDance, task_context
+
+with task_context("move_to_kitchen"):
+    robot = ShadowDance(SportClient())
+    robot.StandUp()
+    robot.Move(0.5, 0, 0)
+```
+
+### Option 3: Nested Tasks
+
+```python
+@task("complex_manipulation")
+def complex_task():
+    # Sub-task 1
+    with task_context("grasp_object"):
+        robot.Move(0.1, 0, 0)
+        robot.close_gripper(0.08)
+    
+    # Sub-task 2
+    with task_context("lift_object"):
+        robot.Move(0, 0, 0.15)
+```
+
+**In LangSmith Runs dashboard:**
+```
+pick_up_box (chain)
+├── StandUp (tool)
+├── Move (tool)
+└── Damp (tool)
+
+move_to_kitchen (chain)
+├── StandUp (tool)
+└── Move (tool)
+```
+
+**Example:**
+```bash
+python examples/nested_tracing.py
+```
+
 ### Code-as-Policies (Full Demo)
 
 Modern LLM robot architecture: VLM → LLM → Code → Robot

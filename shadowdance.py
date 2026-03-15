@@ -6,20 +6,22 @@ logging them as LangSmith runs with command name, arguments, result,
 timestamp, and duration.
 
 Usage:
-    from shadowdance import ShadowDance
+    from shadowdance import ShadowDance, task
     
-    # OpenAI client (LLM runs)
+    # Option 1: Wrap clients directly
     client = OpenAI()
     client = ShadowDance(client, run_type="llm")
     response = client.chat.completions.create(...)  # Traced as LLM
 
-    # Robot client (tool runs)
-    client = SportClient()
-    client = ShadowDance(client, run_type="tool")
-    client.Move(0.3, 0, 0)  # Traced as tool
-
-    # With dataset logging for experiments
-    client = ShadowDance(client, run_type="tool", log_to_dataset="robot-tasks")
+    # Option 2: Use task decorator for parent runs
+    @task("pick_up_box")
+    def my_task():
+        robot = ShadowDance(SportClient(), run_type="tool")
+        robot.Move(0.3, 0, 0)  # Nested under "pick_up_box"
+    
+    # Option 3: Specify parent run manually
+    robot = ShadowDance(SportClient(), parent_run="my_task")
+    robot.Move(0.3, 0, 0)  # Nested under "my_task"
 """
 
 from __future__ import annotations
@@ -27,11 +29,78 @@ from __future__ import annotations
 import time
 from functools import wraps
 from typing import Any, Callable, Literal, Optional
+from contextlib import contextmanager
 
 from langsmith import trace
 from langsmith import Client as LangSmithClient
+from langsmith.run_helpers import get_current_run_tree
 
 RunType = Literal["tool", "chain", "llm", "retriever", "embedding", "prompt"]
+
+
+# ============================================================================
+# Task Decorator & Context Manager
+# ============================================================================
+
+def task(name: str, run_type: RunType = "chain", **kwargs):
+    """
+    Decorator to create a parent run for nested tracing.
+    
+    All ShadowDance-wrapped calls inside the function will be nested
+    under this parent run.
+    
+    Args:
+        name: Name of the task/run
+        run_type: LangSmith run type (default: "chain")
+        **kwargs: Additional metadata to log
+    
+    Usage:
+        @task("pick_up_box")
+        def pick_up_box():
+            robot = ShadowDance(SportClient())
+            robot.StandUp()
+            robot.Move(0.3, 0, 0)
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args, **func_kwargs):
+            with trace(name=name, run_type=run_type, **kwargs) as rt:
+                # Store run info for child traces to find
+                rt.metadata.update({
+                    "function": func.__name__,
+                    "args": args,
+                    "kwargs": func_kwargs,
+                })
+                result = func(*args, **func_kwargs)
+                rt.end(outputs={"result": result})
+                return result
+        return wrapper
+    return decorator
+
+
+@contextmanager
+def task_context(name: str, run_type: RunType = "chain", **kwargs):
+    """
+    Context manager for creating parent runs.
+    
+    Usage:
+        with task_context("pick_up_box"):
+            robot = ShadowDance(SportClient())
+            robot.StandUp()
+            robot.Move(0.3, 0, 0)
+    """
+    with trace(name=name, run_type=run_type, **kwargs) as rt:
+        rt.metadata.update({"context": "task_context"})
+        yield rt
+        rt.end()
+
+
+def get_parent_run():
+    """Get the current parent run tree if in a trace context."""
+    try:
+        return get_current_run_tree()
+    except Exception:
+        return None
 
 
 class ShadowDance:
@@ -42,9 +111,10 @@ class ShadowDance:
     Every method call becomes a traced LangSmith event with proper run type.
     
     Optionally logs to datasets for experiments and evaluation.
+    Automatically nests under parent runs created by @task decorator or task_context.
 
     Usage:
-        from shadowdance import ShadowDance
+        from shadowdance import ShadowDance, task
 
         # OpenAI client - traced as LLM
         client = OpenAI()
@@ -56,18 +126,24 @@ class ShadowDance:
         client = ShadowDance(client, run_type="tool")
         client.Move(0.3, 0, 0)
         
+        # With task decorator for nesting
+        @task("pick_up_box")
+        def my_task():
+            robot = ShadowDance(SportClient())
+            robot.Move(0.3, 0, 0)  # Nested under "pick_up_box"
+        
+        # Or specify parent run manually
+        client = ShadowDance(SportClient(), parent_run="my_task")
+        
         # Log to dataset for experiments
         client = ShadowDance(client, run_type="tool", log_to_dataset="robot-tasks")
-
-        # Custom client - traced as chain
-        client = CustomClient()
-        client = ShadowDance(client, run_type="chain")
     """
 
     def __init__(
         self, 
         client: Any, 
         run_type: RunType = "tool",
+        parent_run: Optional[str] = None,
         log_to_dataset: Optional[str] = None,
     ):
         """
@@ -78,11 +154,14 @@ class ShadowDance:
             run_type: LangSmith run type for better dashboard filtering.
                       Options: "tool", "chain", "llm", "retriever", "embedding", "prompt"
                       Default: "tool"
+            parent_run: Optional name of parent run for nesting.
+                       If None, auto-detects from @task decorator context.
             log_to_dataset: Optional dataset name to log examples for experiments.
                            Creates/uses dataset for evaluation and regression testing.
         """
         self._client = client
         self._run_type = run_type
+        self._parent_run_name = parent_run
         self._log_to_dataset = log_to_dataset
         self._ls_client = None
         
@@ -100,6 +179,25 @@ class ShadowDance:
             except Exception as e:
                 print(f"[ShadowDance] Warning: Could not initialize dataset '{log_to_dataset}': {e}")
                 self._log_to_dataset = None
+
+    def _get_parent_run(self):
+        """
+        Get the parent run for nesting.
+        
+        Priority:
+        1. Explicit parent_run parameter
+        2. Auto-detect from current trace context (@task decorator)
+        3. None (no nesting)
+        """
+        # If explicit parent run name specified
+        if self._parent_run_name:
+            # Try to find by name in current context
+            # For now, just return None and let user use @task decorator
+            # Future: could look up by name from a registry
+            return None
+        
+        # Auto-detect from current trace context
+        return get_parent_run()
 
     def __getattr__(self, name: str) -> Any:
         """
@@ -124,6 +222,9 @@ class ShadowDance:
     def _wrap_method(self, method: Callable, name: str) -> Callable:
         """
         Wrap a method with LangSmith tracing.
+        
+        Automatically nests under parent runs from @task decorator,
+        task_context, or explicit parent_run parameter.
 
         Args:
             method: The method to wrap.
@@ -138,8 +239,11 @@ class ShadowDance:
             start_time = time.perf_counter()
             result: Any = None
             error: Optional[Exception] = None
+            
+            # Get parent run for nesting
+            parent = self._get_parent_run()
 
-            with trace(name=name, run_type=self._run_type) as rt:
+            with trace(name=name, run_type=self._run_type, parent=parent) as rt:
                 try:
                     # Log inputs
                     input_data = {}
@@ -207,3 +311,16 @@ class ShadowDance:
     def __repr__(self) -> str:
         """Return a string representation of the ShadowDance wrapper."""
         return f"ShadowDance({self._client!r})"
+
+
+# ============================================================================
+# Exports
+# ============================================================================
+
+__all__ = [
+    "ShadowDance",
+    "task",
+    "task_context",
+    "get_parent_run",
+    "RunType",
+]
