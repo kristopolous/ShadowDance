@@ -8,7 +8,7 @@ Architecture:
 1. VLM analyzes image → scene description
 2. LLM generates Python code for the task
 3. Code executes with safety checks
-4. All traced via ShadowDance
+4. All traced via ShadowDance with clean organization
 
 References:
 - Code as Policies: https://code-as-policies.github.io/
@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from typing import Optional, Callable
 
 from dotenv import load_dotenv
-from shadowdance import ShadowDance
+from shadowdance import ShadowDance, task, task_context
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -428,6 +428,7 @@ class SafeExecutor:
 # Main Agent (orchestrates everything)
 # ============================================================================
 
+@task("code_as_policies_task", tags=["llm", "vision", "demo"])
 class CodeAsPoliciesAgent:
     """
     Code-as-Policies agent.
@@ -445,43 +446,46 @@ class CodeAsPoliciesAgent:
         self.codegen = ShadowDance(CodeGenerator(), run_type="llm")  # LLM calls
         self.robot = RobotAPI()
     
-    def run(self, task: str, image_path: str) -> bool:
+    def run(self, task_name: str, image_path: str) -> bool:
         """
         Execute task using code-as-policies.
-        
+
         Args:
             task: Natural language task
             image_path: Path to scene image
-            
+
         Returns:
             True if successful
         """
         print(f"\n{'='*60}")
-        print(f"Task: {task}")
+        print(f"Task: {task_name}")
         print(f"{'='*60}\n")
-        
+
         # Step 1: Vision - analyze scene
-        print("Step 1: Vision Analysis")
-        scene = self.vision.analyze_scene(image_path, task)
-        print(f"  Detected objects:")
-        for obj in scene.get("objects", []):
-            print(f"    - {obj['name']} at {obj['position']}")
-        print()
-        
+        with task_context("vision_analysis", tags=["vision", "llm"]):
+            print("Step 1: Vision Analysis")
+            scene = self.vision.analyze_scene(image_path, task_name)
+            print(f"  Detected objects:")
+            for obj in scene.get("objects", []):
+                print(f"    - {obj['name']} at {obj['position']}")
+            print()
+
         # Step 2: Code generation
-        print("Step 2: Code Generation")
-        code = self.codegen.generate(task, scene)
-        print(f"  Generated code:\n")
-        for line in code.split('\n'):
-            if line.strip() and not line.strip().startswith('#'):
-                print(f"    {line}")
-        print()
-        
+        with task_context("code_generation", tags=["planning", "llm"]):
+            print("Step 2: Code Generation")
+            code = self.codegen.generate(task_name, scene)
+            print(f"  Generated code:\n")
+            for line in code.split('\n'):
+                if line.strip() and not line.strip().startswith('#'):
+                    print(f"    {line}")
+            print()
+
         # Step 3: Execute
-        print("Step 3: Code Execution")
-        executor = SafeExecutor(self.robot)
-        success = executor.execute(code)
-        
+        with task_context("code_execution", tags=["control", "robot"]):
+            print("Step 3: Code Execution")
+            executor = SafeExecutor(self.robot)
+            success = executor.execute(code)
+
         # Report results
         print(f"\n{'='*60}")
         print(f"Execution: {'SUCCESS' if success else 'FAILED'}")
@@ -489,7 +493,7 @@ class CodeAsPoliciesAgent:
         print(f"Final pose: {self.robot.get_pose()}")
         print(f"Holding: {self.robot.is_holding()}")
         print(f"{'='*60}\n")
-        
+
         return success
 
 
@@ -519,7 +523,7 @@ def main():
     
     # Run task
     success = agent.run(
-        task="Pick up the white box",
+        task_name="Pick up the white box",
         image_path=str(image_path),
     )
     

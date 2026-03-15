@@ -15,7 +15,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from shadowdance import ShadowDance
+from shadowdance import ShadowDance, task, task_context
 from examples.virtual_robot import VirtualRobotServer, VirtualRobotClient
 
 load_dotenv(Path(__file__).parent.parent / ".env")
@@ -63,6 +63,7 @@ EVALUATION_TASKS = [
 # Step 2: Run evaluation against dataset
 # ============================================================================
 
+@task("robot_evaluation", tags=["evaluation", "testing"])
 def run_evaluation(robot, dataset_name: str = "robot-evaluation"):
     """
     Run evaluation tasks and log results to dataset.
@@ -78,43 +79,44 @@ def run_evaluation(robot, dataset_name: str = "robot-evaluation"):
     results = []
     
     for task in EVALUATION_TASKS:
-        print(f"Task: {task['name']} - {task['description']}")
-        
-        task_success = True
-        task_results = []
-        
-        for method_name, kwargs, expected in task["commands"]:
-            try:
-                method = getattr(robot, method_name)
-                result = method(**kwargs)
-                success = result == expected
-                task_results.append({
-                    "method": method_name,
-                    "success": success,
-                    "result": result,
-                    "expected": expected,
-                })
-                if not success:
+        with task_context(f"eval_{task['name']}", tags=["task"]):
+            print(f"Task: {task['name']} - {task['description']}")
+            
+            task_success = True
+            task_results = []
+            
+            for method_name, kwargs, expected in task["commands"]:
+                try:
+                    method = getattr(robot, method_name)
+                    result = method(**kwargs)
+                    success = result == expected
+                    task_results.append({
+                        "method": method_name,
+                        "success": success,
+                        "result": result,
+                        "expected": expected,
+                    })
+                    if not success:
+                        task_success = False
+                        print(f"  ✗ {method_name}: got {result}, expected {expected}")
+                    else:
+                        print(f"  ✓ {method_name}: {result}")
+                        
+                except Exception as e:
                     task_success = False
-                    print(f"  ✗ {method_name}: got {result}, expected {expected}")
-                else:
-                    print(f"  ✓ {method_name}: {result}")
-                    
-            except Exception as e:
-                task_success = False
-                task_results.append({
-                    "method": method_name,
-                    "success": False,
-                    "error": str(e),
-                })
-                print(f"  ✗ {method_name}: ERROR - {e}")
-        
-        results.append({
-            "task": task["name"],
-            "success": task_success,
-            "results": task_results,
-        })
-        print()
+                    task_results.append({
+                        "method": method_name,
+                        "success": False,
+                        "error": str(e),
+                    })
+                    print(f"  ✗ {method_name}: ERROR - {e}")
+            
+            results.append({
+                "task": task["name"],
+                "success": task_success,
+                "results": task_results,
+            })
+            print()
     
     # Summary
     total_tasks = len(results)
