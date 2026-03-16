@@ -58,6 +58,7 @@ from .adapters import (
 )
 from .adapters.langsmith import LangSmithAdapter
 from .adapters.langfuse import LangfuseAdapter
+from .adapters.passthrough import PassThroughAdapter
 
 # WeaveAdapter is imported lazily to avoid requiring weave unless PLATFORM=weave
 # from .adapters.weave import WeaveAdapter
@@ -79,7 +80,10 @@ def _get_adapter() -> ObservabilityAdapter:
 
     platform = os.environ.get("PLATFORM", "langsmith").lower()
 
-    if platform == "weave":
+    if platform == "passthrough":
+        from .adapters.passthrough import PassThroughAdapter
+        _adapter_cache = PassThroughAdapter()
+    elif platform == "weave":
         from .adapters.weave import WeaveAdapter
         _adapter_cache = WeaveAdapter()
     elif platform == "langfuse":
@@ -90,7 +94,7 @@ def _get_adapter() -> ObservabilityAdapter:
         _adapter_cache = LangSmithAdapter()
     else:
         raise ValueError(
-            f"Unknown PLATFORM: {platform}. Must be 'langsmith', 'langfuse', or 'weave'"
+            f"Unknown PLATFORM: {platform}. Must be 'passthrough', 'langsmith', 'langfuse', or 'weave'"
         )
 
     return _adapter_cache
@@ -406,6 +410,7 @@ __all__ = [
     "LangSmithAdapter",
     "LangfuseAdapter",
     "WeaveAdapter",
+    "PassThroughAdapter",
     "TraceEvent",
     "DatasetExample",
 ]
