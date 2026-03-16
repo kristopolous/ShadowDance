@@ -2,10 +2,106 @@
 <img width=250px src=https://9ol.es/tmp/shadow-logo.png>
 <br/>
 <a href=https://pypi.org/project/shadowdance><img src=https://badge.fury.io/py/shadowdance.svg/></a>
-<br/><strong>One line. Multi-platform observability for LLM and robot SDKs.</strong>
+<br/><strong>Zero-code-change observability for Python.</strong>
 </p>
 
-## Quick Start: Robot Tracing
+## The Promise
+
+**Your existing code needs exactly ONE line of change.**
+
+No refactoring. No decorators. No rewriting. Just wrap your existing client/object and everything is traced.
+
+```python
+# Your existing code - unchanged
+from some_library import SomeClient
+
+client = SomeClient()
+client.do_something(arg1, arg2)
+client.do_another_thing()
+```
+
+Becomes:
+
+```python
+# Your existing code - ONE LINE CHANGE
+from some_library import SomeClient
+from shadowdance import ShadowDance
+
+client = SomeClient()
+client = ShadowDance(client)  # <- THAT'S IT. Everything below is traced.
+client.do_something(arg1, arg2)
+client.do_another_thing()
+```
+
+Every method call is now traced with inputs, outputs, timing, and errors. **You don't touch any of your existing logic.**
+
+## Quick Start
+
+```python
+from shadowdance import ShadowDance
+
+# Wrap any existing client or object
+existing_client = SomeLibrary.Client()
+existing_client = ShadowDance(existing_client)  # One line
+
+# Everything below works exactly as before - now fully traced
+existing_client.method1(arg1, arg2)
+existing_client.method2()
+result = existing_client.method3(key="value")
+```
+
+That's it. Your code doesn't change. ShadowDance intercepts all method calls automatically.
+
+## Use Cases
+
+### LLM Observability
+
+```python
+from openai import OpenAI
+from shadowdance import ShadowDance
+
+# Your existing OpenAI code
+client = OpenAI()
+client = ShadowDance(client, run_type="llm")  # One line
+
+# Everything traced: prompts, completions, timing, tokens
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+```
+
+### API Clients
+
+```python
+import requests
+from shadowdance import ShadowDance
+
+# Wrap any HTTP client
+api_client = SomeAPIClient()
+api_client = ShadowDance(api_client, run_type="tool")  # One line
+
+# All API calls traced
+data = api_client.fetch_data()
+api_client.post_update(item)
+```
+
+### Database Clients
+
+```python
+import redis
+from shadowdance import ShadowDance
+
+# Wrap your database client
+db = redis.Redis()
+db = ShadowDance(db, run_type="tool")  # One line
+
+# All queries traced
+db.set("key", "value")
+result = db.get("key")
+```
+
+### Robot SDKs (Original Use Case)
 
 ```python
 from unitree_sdk2py.go2.sport.sport_client import SportClient
@@ -14,182 +110,47 @@ from shadowdance import ShadowDance
 # Your existing robot code
 client = SportClient()
 client.Init()
+client = ShadowDance(client)  # One line
 
-# ONE LINE - wrap with ShadowDance
-client = ShadowDance(client)  # <- that's all you need!
-
-# Everything else unchanged - now fully traced
+# All robot commands traced
 client.StandUp()
 client.Move(0.3, 0, 0)
 client.Damp()
 ```
 
-Every robot command is now a traced LangSmith event with full inputs, outputs, and timing.
-
-## Connect to LLMs: Code-as-Policies
-
-Add LLM decision-making and trace the full stack (vision → planning → execution):
-
-```python
-from shadowdance import ShadowDance
-from openai import OpenAI
-
-# Wrap your robot (as above)
-robot = SportClient()
-robot = ShadowDance(robot, run_type="tool")
-
-# Wrap your LLM (ONE LINE)
-llm = OpenAI()
-llm = ShadowDance(llm, run_type="llm")
-
-# Simple code-as-policies: LLM generates robot commands
-task = "move forward and stop"
-prompt = f"Generate robot commands for: {task}"
-
-response = llm.chat.completions.create(
-    model="gpt-4",
-    messages=[{"role": "user", "content": prompt}]
-)
-
-# Execute LLM-generated commands (traced!)
-exec(response.choices[0].message.content)  # e.g., robot.Move(0.3, 0, 0)
-```
-
-Now in LangSmith you see the **full chain**: LLM reasoning → generated code → robot execution.
-
-## Architecture
-
-Modern LLM-powered robots use a **layered architecture**:
-
-```
-┌─────────────────────────────────────────┐
-│  Your Agent Code                        │
-│  ShadowDance(agent, run_type="chain")   │
-├─────────────────────────────────────────┤
-│  LLM (OpenAI, etc.)                     │
-│  ShadowDance(llm, run_type="llm")       │
-│  "pick up box" → [move, grasp, lift]    │
-├─────────────────────────────────────────┤
-│  Robot SDK (Unitree, etc.)              │
-│  ShadowDance(robot, run_type="tool")    │
-│  Move(0.3, 0, 0), StandUp(), etc.       │
-└─────────────────────────────────────────┘
-```
-
-Wrap each layer with ShadowDance → see the **full decision chain** in your observability platform.
-
-### Adapter Pattern
-
-ShadowDance uses an adapter pattern to support multiple observability backends:
-
-```
-┌─────────────────────────────────┐
-│      ShadowDance Wrapper        │
-│  (platform-agnostic interface)  │
-└───────────────┬─────────────────┘
-                │
-    ┌───────────┴───────────┐
-    │                       │
-┌───▼──────────┐   ┌────────▼────────┐
-│ LangSmith    │   │   Langfuse      │
-│ Adapter      │   │   Adapter       │
-└──────────────┘   └─────────────────┘
-```
-
-Select your platform via the `PLATFORM` environment variable:
-- `PLATFORM=langsmith` (default)
-- `PLATFORM=langfuse`
-
-See [shadowdance/adapters/README.md](shadowdance/adapters/README.md) for detailed adapter documentation, including how to create custom adapters.
-
-## Installation
-
-```bash
-pip install shadowdance
-```
-
-## Setup
-
-```bash
-# Load environment variables (create .env with your keys)
-source .env
-```
-
-### Choose Your Observability Platform
+## Choose Your Observability Platform
 
 ShadowDance supports multiple backends via the `PLATFORM` environment variable:
 
 **LangSmith (default):**
 ```bash
-PLATFORM=langsmith
-LANGCHAIN_API_KEY=...
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_PROJECT=shadowdance
+export PLATFORM=langsmith
+export LANGCHAIN_API_KEY=...
 ```
 
 **Langfuse:**
 ```bash
-PLATFORM=langfuse
-LANGFUSE_PUBLIC_KEY=pk-lf-...
-LANGFUSE_SECRET_KEY=sk-lf-...
-LANGFUSE_HOST=https://cloud.langfuse.com  # Optional, for self-hosted
+export PLATFORM=langfuse
+export LANGFUSE_PUBLIC_KEY=...
+export LANGFUSE_SECRET_KEY=...
 ```
 
 **Weave (Weights & Biases):**
 ```bash
-PLATFORM=weave
-WANDB_API_KEY=...
+export PLATFORM=weave
+export WANDB_API_KEY=...
 ```
 
-### LLM Configuration
+**Note:** You only need to install the platform you use. ShadowDance uses lazy imports.
 
-```bash
-# OpenRouter (OpenAI-compatible API)
-OPENAI_API_KEY=...
-OPENAI_BASE_URL=https://openrouter.ai/api/v1
+## Run Types
 
-# Default model for vision and planning
-DEFAULT_MODEL=openrouter/hunter-alpha
-```
-
-### Test Connection
-
-```bash
-python examples/test_openrouter.py
-```
-
-## Examples
-
-### Full Demo: Code-as-Policies
-
-```bash
-python examples/code_as_policies.py
-```
-
-This demonstrates the complete **Code-as-Policies** approach:
-1. **VLM** analyzes image → detects white box at [0.0, 0.1, 0.72]
-2. **LLM** generates Python code → `robot.move_to(...)`, `robot.close_gripper(...)`
-3. **Safe executor** runs code → robot picks up box
-4. **ShadowDance** traces everything → debug in LangSmith
-
-```
-Task: "Pick up the white box"
-  ↓
-Vision: white_box detected at [0.0, 0.1, 0.72]
-  ↓  
-LLM: Generates 4-line Python program
-  ↓
-Robot: move_to → close_gripper → move_to (SUCCESS)
-```
-
-### Run Types
-
-LangSmith has different run types for better dashboard filtering:
+Run types help you filter and organize traces in your dashboard:
 
 | Run Type | Use Case | Example |
 |----------|----------|---------|
 | `"llm"` | LLM/VLM API calls | OpenAI, Anthropic, vision models |
-| `"tool"` | Function/tool calls | Robot commands, API wrappers |
+| `"tool"` | Function/tool calls | API wrappers, database queries |
 | `"chain"` | Orchestration logic | Agents, multi-step workflows |
 | `"retriever"` | Document retrieval | RAG systems, vector stores |
 | `"embedding"` | Embedding generation | Text embeddings |
@@ -199,194 +160,109 @@ LangSmith has different run types for better dashboard filtering:
 # LLM calls
 client = ShadowDance(OpenAI(), run_type="llm")
 
-# Robot/tool calls
-client = ShadowDance(SportClient(), run_type="tool")
+# API/tool calls
+client = ShadowDance(APIClient(), run_type="tool")
 
 # Agent orchestration
 agent = ShadowDance(MyAgent(), run_type="chain")
 ```
 
+## Nested Tracing (Optional)
+
+If you want to organize traces under parent tasks, use the `@task` decorator:
+
+```python
+from shadowdance import ShadowDance, task
+
+@task("process_request")  # Creates parent run
+def process_request():
+    # All ShadowDance-wrapped calls inside are nested
+    client = ShadowDance(APIClient())
+    client.fetch_data()    # Nested under "process_request"
+    client.transform()     # Nested
+    client.save()          # Nested
+
+process_request()
+```
+
+**In your dashboard:**
+```
+process_request (chain)
+├── fetch_data (tool)
+├── transform (tool)
+└── save (tool)
+```
+
 ## Datasets & Experiments
 
-Use ShadowDance with LangSmith datasets for **robot evaluation and regression testing**:
+Log executions to datasets for evaluation and regression testing:
 
 ```python
 from shadowdance import ShadowDance
 
 # Log all executions to a dataset
-robot = ShadowDance(
-    SportClient(), 
-    run_type="tool", 
-    log_to_dataset="robot-tasks"  # Creates dataset automatically
+client = ShadowDance(
+    APIClient(),
+    run_type="tool",
+    log_to_dataset="api-calls"  # Creates dataset automatically
 )
 
-# Every command is logged as an example
-robot.StandUp()      # ✓ Logged with inputs, outputs, success
-robot.Move(0.3, 0, 0)  # ✓ Logged with duration, result
+# Every call is logged as an example
+client.do_something(arg1)  # ✓ Logged with inputs, outputs, timing
+client.do_another(arg2)    # ✓ Logged with duration, result
 ```
 
-**In LangSmith:**
+**In your dashboard:**
 1. Go to **Datasets & Experiments** tab
-2. Find `robot-tasks` dataset with all executions
-3. Create experiments to compare robot versions
+2. Find your dataset with all executions
+3. Create experiments to compare versions
 4. Run regression tests on code changes
 
-**Example: Evaluate robot configurations**
-```bash
-python examples/robot_evaluation.py
+## Example Output
+
+**Your observability dashboard:**
+```
+Run: api_session
+  └── fetch_data(query="users")     45ms  ✓
+  └── transform(data)               12ms  ✓
+  └── save(result)                  23ms  ✓
+  └── get("key")                     8ms  ✓
 ```
 
-This creates datasets (`robot-eval-v1`, `robot-eval-v2`) and compares task success rates across configurations.
+View traces at:
+- **LangSmith**: [smith.langchain.com](https://smith.langchain.com)
+- **Langfuse**: Your Langfuse dashboard
+- **Weave**: Your Weave project in W&B
 
-## Nested Tracing
-
-Organize robot primitives under **task runs** for better visibility:
-
-### Option 1: `@task` Decorator (Recommended)
-
-```python
-from shadowdance import ShadowDance, task
-
-@task("pick_up_box")  # Creates parent run
-def pick_up_box():
-    robot = ShadowDance(SportClient())
-    robot.StandUp()     # Nested under "pick_up_box"
-    robot.Move(0.3, 0, 0)  # Nested
-    robot.Damp()        # Nested
-
-pick_up_box()
-```
-
-### Option 2: `task_context` Manager
-
-```python
-from shadowdance import ShadowDance, task_context
-
-with task_context("move_to_kitchen"):
-    robot = ShadowDance(SportClient())
-    robot.StandUp()
-    robot.Move(0.5, 0, 0)
-```
-
-### Option 3: Nested Tasks
-
-```python
-@task("complex_manipulation")
-def complex_task():
-    # Sub-task 1
-    with task_context("grasp_object"):
-        robot.Move(0.1, 0, 0)
-        robot.close_gripper(0.08)
-    
-    # Sub-task 2
-    with task_context("lift_object"):
-        robot.Move(0, 0, 0.15)
-```
-
-**In LangSmith Runs dashboard:**
-```
-pick_up_box (chain)
-├── StandUp (tool)
-├── Move (tool)
-└── Damp (tool)
-
-move_to_kitchen (chain)
-├── StandUp (tool)
-└── Move (tool)
-```
-
-**Example:**
-```bash
-python examples/nested_tracing.py
-```
-
-## Demo
-
-### Investor Demo
-
-For a polished demonstration showing the full capabilities:
+## Installation
 
 ```bash
-python examples/investor_demo.py
+pip install shadowdance
 ```
 
-This creates **beautiful, organized traces** showing:
-- 📦 **Warehouse Automation** - Pick and place with perception → planning → execution
-- 🔍 **Quality Inspection** - Multi-point inspection with detailed tracking
-- 🚨 **Safety Systems** - Emergency response with critical event logging
-
-**Perfect for showing investors:**
-1. Run the demo
-2. Open https://smith.langchain.com
-3. Project: `shadowdance-demo`
-4. Watch traces appear in real-time
-
-Each task shows clear hierarchy:
-```
-warehouse_pick_and_place (chain)
-├── perception_phase (vision)
-├── planning_phase (llm)
-├── execution_phase (control)
-│   ├── StandUp (tool)
-│   ├── Move (tool) ×5
-│   └── Damp (tool)
-└── return_phase (control)
-```
-
-### Code-as-Policies (Full Demo)
-
-Modern LLM robot architecture: VLM → LLM → Code → Robot
+Then install your chosen platform:
 
 ```bash
-python examples/code_as_policies.py
-```
+# For LangSmith (default)
+pip install langsmith
 
-This demonstrates the **Code-as-Policies** approach:
-1. **VLM** analyzes image → detects white box at [0.0, 0.1, 0.72]
-2. **LLM** generates Python code → `robot.move_to(...)`, `robot.close_gripper(...)`
-3. **Safe executor** runs code → robot picks up box
-4. **ShadowDance** traces everything → debug in LangSmith
+# For Langfuse
+pip install langfuse
 
-```
-Task: "Pick up the white box"
-  ↓
-Vision: white_box detected at [0.0, 0.1, 0.72]
-  ↓  
-LLM: Generates 4-line Python program
-  ↓
-Robot: move_to → close_gripper → move_to (SUCCESS)
-```
-
-## Example output in LangSmith
-
-```
-Run: robot_session
-  └── Move(vx=0.3, vy=0, vyaw=0)        12ms  ✓
-  └── StandUp()                          8ms  ✓
-  └── Move(vx=0, vy=0.3, vyaw=0)        11ms  ✓
-  └── Damp()                             9ms  ✓
-```
-
-View your traces at [smith.langchain.com](https://smith.langchain.com)
-
-## Testing
-
-```bash
-# Run unit tests
-python test_shadowdance.py
-
-# Run with virtual robot
-python examples/with_virtual_robot.py
+# For Weave
+pip install wandb
 ```
 
 ## API
 
-### `ShadowDance(client)`
+### `ShadowDance(client, run_type="tool", log_to_dataset=None)`
 
-Wraps a client object with LangSmith tracing.
+Wraps any client object with observability tracing.
 
 **Args:**
-- `client`: The Unitree SDK client object to wrap
+- `client`: Any Python object with methods (API client, database client, LLM client, etc.)
+- `run_type`: Type for filtering in dashboard ("tool", "llm", "chain", etc.)
+- `log_to_dataset`: Optional dataset name for evaluation logging
 
 **Returns:**
 - A proxy object that intercepts all method calls
@@ -394,10 +270,33 @@ Wraps a client object with LangSmith tracing.
 **Example:**
 ```python
 wrapped = ShadowDance(client)
-wrapped.Move(0.3, 0, 0)  # Traced in your observability platform
+wrapped.method(arg1, arg2)  # Automatically traced
 ```
 
-## File structure
+### `@task(name, run_type="chain")`
+
+Optional decorator to create parent runs for nested tracing.
+
+**Example:**
+```python
+@task("my_workflow")
+def my_function():
+    client = ShadowDance(APIClient())
+    client.do_something()  # Nested under "my_workflow"
+```
+
+### `task_context(name, run_type="chain")`
+
+Optional context manager for creating parent runs.
+
+**Example:**
+```python
+with task_context("batch_process"):
+    client = ShadowDance(APIClient())
+    client.process_batch(items)
+```
+
+## File Structure
 
 ```
 ./shadowdance/                # Main package
@@ -406,25 +305,47 @@ wrapped.Move(0.3, 0, 0)  # Traced in your observability platform
     ├── __init__.py           # Base interface + TraceEvent
     ├── langsmith.py          # LangSmith adapter
     ├── langfuse.py           # Langfuse adapter
+    ├── weave.py              # Weave adapter (W&B)
     ├── example.py            # Template for custom adapters
     └── README.md             # Adapter documentation
 ./test_shadowdance.py         # Unit tests
-./examples/
-├── basic.py                  # Basic usage
-├── error_handling.py         # Error handling demo
-├── virtual_robot.py          # Virtual robot server
-└── with_virtual_robot.py     # Virtual robot + observability demo
+./examples/                   # Example code
 ./pyproject.toml              # Package configuration
 ./requirements.txt            # Dependencies
-./.env                        # Platform credentials (gitignored)
 ```
 
 ## Why
 
-The Unitree SDK has no logging, no observability, no way to know why your robot did what it did. ShadowDance fixes that. This wrapper connects them with one line of code.
+Most observability tools require you to:
+- Add decorators to every function
+- Refactor your code structure
+- Change how you call methods
+- Learn a new framework
 
-Choose your observability platform:
+**ShadowDance is different.** It's a transparent wrapper that intercepts method calls without changing your code.
+
+The Unitree robot SDK has no logging, no observability, no way to know why your robot did what it did. ShadowDance fixes that with one line.
+
+Your API client has no tracing. ShadowDance adds it with one line.
+
+Your LLM calls are a black box. ShadowDance opens it with one line.
+
+**No refactoring. No decorators on your functions. No code changes.** Just wrap and go.
+
+## Choose Your Platform
+
 - **LangSmith**: Full-featured LLM observability with datasets, experiments, and evaluation
 - **Langfuse**: Open-source alternative with tracing, metrics, and prompt management
 - **Weave**: Weights & Biases LLM observability with automatic tracing
 - **Custom**: Build your own adapter (see [adapters/README.md](shadowdance/adapters/README.md))
+
+## Testing
+
+```bash
+# Run unit tests
+python test_shadowdance.py
+```
+
+## License
+
+MIT
