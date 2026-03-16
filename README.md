@@ -2,7 +2,7 @@
 <img width=250px src=https://9ol.es/tmp/shadow-logo.png>
 <br/>
 <a href=https://pypi.org/project/shadowdance><img src=https://badge.fury.io/py/shadowdance.svg/></a>
-<br/><strong>One line. Full LangSmith observability for robot SDKs.</strong>
+<br/><strong>One line. Multi-platform observability for LLM and robot SDKs.</strong>
 </p>
 
 ## Quick Start: Robot Tracing
@@ -76,7 +76,31 @@ Modern LLM-powered robots use a **layered architecture**:
 └─────────────────────────────────────────┘
 ```
 
-Wrap each layer with ShadowDance → see the **full decision chain** in LangSmith.
+Wrap each layer with ShadowDance → see the **full decision chain** in your observability platform.
+
+### Adapter Pattern
+
+ShadowDance uses an adapter pattern to support multiple observability backends:
+
+```
+┌─────────────────────────────────┐
+│      ShadowDance Wrapper        │
+│  (platform-agnostic interface)  │
+└───────────────┬─────────────────┘
+                │
+    ┌───────────┴───────────┐
+    │                       │
+┌───▼──────────┐   ┌────────▼────────┐
+│ LangSmith    │   │   Langfuse      │
+│ Adapter      │   │   Adapter       │
+└──────────────┘   └─────────────────┘
+```
+
+Select your platform via the `PLATFORM` environment variable:
+- `PLATFORM=langsmith` (default)
+- `PLATFORM=langfuse`
+
+See [shadowdance/adapters/README.md](shadowdance/adapters/README.md) for detailed adapter documentation, including how to create custom adapters.
 
 ## Installation
 
@@ -91,14 +115,29 @@ pip install shadowdance
 source .env
 ```
 
-The `.env` file contains:
+### Choose Your Observability Platform
 
+ShadowDance supports multiple backends via the `PLATFORM` environment variable:
+
+**LangSmith (default):**
 ```bash
-# LangSmith tracing
+PLATFORM=langsmith
 LANGCHAIN_API_KEY=...
 LANGCHAIN_TRACING_V2=true
 LANGCHAIN_PROJECT=shadowdance
+```
 
+**Langfuse:**
+```bash
+PLATFORM=langfuse
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_HOST=https://cloud.langfuse.com  # Optional, for self-hosted
+```
+
+### LLM Configuration
+
+```bash
 # OpenRouter (OpenAI-compatible API)
 OPENAI_API_KEY=...
 OPENAI_BASE_URL=https://openrouter.ai/api/v1
@@ -106,13 +145,6 @@ OPENAI_BASE_URL=https://openrouter.ai/api/v1
 # Default model for vision and planning
 DEFAULT_MODEL=openrouter/hunter-alpha
 ```
-
-### Using Different Models
-
-Change `DEFAULT_MODEL` in `.env` to use different models:
-
-- **Vision + Text**: `openrouter/hunter-alpha` (multimodal)
-- **Free models**: See [OpenRouter's model list](https://openrouter.ai/models)
 
 ### Test Connection
 
@@ -356,24 +388,36 @@ Wraps a client object with LangSmith tracing.
 **Example:**
 ```python
 wrapped = ShadowDance(client)
-wrapped.Move(0.3, 0, 0)  # Traced as "Move" in LangSmith
+wrapped.Move(0.3, 0, 0)  # Traced in your observability platform
 ```
 
 ## File structure
 
 ```
-./shadowdance.py              # Main implementation
+./shadowdance/                # Main package
+├── __init__.py               # ShadowDance wrapper + factory
+└── adapters/
+    ├── __init__.py           # Base interface + TraceEvent
+    ├── langsmith.py          # LangSmith adapter
+    ├── langfuse.py           # Langfuse adapter
+    ├── example.py            # Template for custom adapters
+    └── README.md             # Adapter documentation
 ./test_shadowdance.py         # Unit tests
 ./examples/
 ├── basic.py                  # Basic usage
 ├── error_handling.py         # Error handling demo
 ├── virtual_robot.py          # Virtual robot server
-└── with_virtual_robot.py     # Virtual robot + LangSmith demo
+└── with_virtual_robot.py     # Virtual robot + observability demo
 ./pyproject.toml              # Package configuration
 ./requirements.txt            # Dependencies
-./.env                        # LangSmith credentials (gitignored)
+./.env                        # Platform credentials (gitignored)
 ```
 
 ## Why
 
-The Unitree SDK has no logging, no observability, no way to know why your robot did what it did. LangSmith fixes that. This wrapper connects them with one line of code.
+The Unitree SDK has no logging, no observability, no way to know why your robot did what it did. ShadowDance fixes that. This wrapper connects them with one line of code.
+
+Choose your observability platform:
+- **LangSmith**: Full-featured LLM observability with datasets, experiments, and evaluation
+- **Langfuse**: Open-source alternative with tracing, metrics, and prompt management
+- **Custom**: Build your own adapter (see [adapters/README.md](shadowdance/adapters/README.md))
