@@ -278,9 +278,13 @@ with task_context("move_to_kitchen"):
     ├── langsmith.py          # LangSmith adapter
     ├── langfuse.py           # Langfuse adapter
     ├── weave.py              # Weave adapter (W&B)
+    ├── passthrough.py        # Pass-through adapter (testing)
     ├── example.py            # Template for custom adapters
     └── README.md             # Adapter documentation
-./test_shadowdance.py         # Unit tests
+./tests/                      # Test suite
+├── test_adapter_comparison.py   # Adapter overhead tests
+├── test_unitree_examples.py   # Unitree SDK verification
+└── unitree_examples/          # Copied Unitree SDK examples
 ./examples/                   # Example code
 ./pyproject.toml              # Package configuration
 ./requirements.txt            # Dependencies
@@ -289,7 +293,14 @@ with task_context("move_to_kitchen"):
 ## Testing
 
 ```bash
-python test_shadowdance.py
+# Run adapter comparison tests (verifies <1ms overhead)
+python tests/test_adapter_comparison.py
+
+# Run Unitree example verification tests
+python tests/test_unitree_examples.py
+
+# Run Unitree examples with different adapters
+python tests/run_examples.py --examples-dir tests/unitree_examples
 ```
 
 ## License

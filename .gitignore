@@ -7,3 +7,4 @@ langsmith
 openrouter.key
 output.log
 dist
+langsmith-sdk
