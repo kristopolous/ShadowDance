@@ -135,6 +135,12 @@ LANGFUSE_SECRET_KEY=sk-lf-...
 LANGFUSE_HOST=https://cloud.langfuse.com  # Optional, for self-hosted
 ```
 
+**Weave (Weights & Biases):**
+```bash
+PLATFORM=weave
+WANDB_API_KEY=...
+```
+
 ### LLM Configuration
 
 ```bash
@@ -420,4 +426,5 @@ The Unitree SDK has no logging, no observability, no way to know why your robot 
 Choose your observability platform:
 - **LangSmith**: Full-featured LLM observability with datasets, experiments, and evaluation
 - **Langfuse**: Open-source alternative with tracing, metrics, and prompt management
+- **Weave**: Weights & Biases LLM observability with automatic tracing
 - **Custom**: Build your own adapter (see [adapters/README.md](shadowdance/adapters/README.md))

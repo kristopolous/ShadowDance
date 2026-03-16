@@ -12,12 +12,19 @@ ShadowDance uses an **adapter pattern** to support multiple observability backen
 │  (platform-agnostic interface)  │
 └───────────────┬─────────────────┘
                 │
-    ┌───────────┴───────────┐
-    │                       │
-┌───▼──────────┐   ┌────────▼────────┐
-│ LangSmith    │   │   Langfuse      │
-│ Adapter      │   │   Adapter       │
-└──────────────┘   └─────────────────┘
+    ┌───────────┼───────────┬───────────┐
+    │           │           │           │
+┌───▼──────┐ ┌──▼──────┐ ┌──▼──────┐   │
+│ LangSmith│ │ Langfuse│ │  Weave  │   │
+│ Adapter  │ │ Adapter │ │ Adapter │   │
+└──────────┘ └─────────┘ └─────────┘   │
+                                       │
+                        ┌──────────────┘
+                        │
+                  ┌─────▼──────┐
+                  │   Custom   │
+                  │  Adapters  │
+                  └────────────┘
 ```
 
 ## Quick Start
@@ -31,6 +38,10 @@ export LANGCHAIN_API_KEY=your-api-key
 export PLATFORM=langfuse
 export LANGFUSE_PUBLIC_KEY=your-public-key
 export LANGFUSE_SECRET_KEY=your-secret-key
+
+# Use Weave (Weights & Biases)
+export PLATFORM=weave
+export WANDB_API_KEY=your-api-key  # Or use wandb login
 ```
 
 ```python
@@ -91,6 +102,34 @@ LANGFUSE_HOST=https://cloud.langfuse.com  # Optional
 ```bash
 export PLATFORM=langfuse
 ```
+
+---
+
+### WeaveAdapter
+
+**Module:** `shadowdance.adapters.weave`
+
+Weights & Biases Weave for LLM observability.
+
+**Features:**
+- Automatic LLM call tracking (OpenAI, Cohere, LiteLLM)
+- Custom tracing with `@weave.op()` decorator
+- Hierarchical traces with parent/child calls
+- Input/output logging with timestamps
+
+**Environment Variables:**
+```bash
+WANDB_API_KEY=...
+WANDB_ENTITY=your-entity  # Optional
+WANDB_PROJECT=your-project  # Optional, defaults to "shadowdance"
+```
+
+**Usage:**
+```bash
+export PLATFORM=weave
+```
+
+**Note:** Requires `wandb` package: `pip install wandb`
 
 ---
 

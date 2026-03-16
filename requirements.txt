@@ -1,7 +1,11 @@
-# ShadowDance - LangSmith observability for Unitree robot SDKs
+# ShadowDance - Multi-platform observability for LLM and robot SDKs
 
-# Core dependencies
-langsmith>=0.1.0
+# Core dependencies (choose your platform)
+# langsmith>=0.1.0       # For PLATFORM=langsmith (default)
+# langfuse>=2.0.0        # For PLATFORM=langfuse
+# wandb>=0.16.0          # For PLATFORM=weave
+
+# Common dependencies
 python-dotenv>=1.0.0
 httpx>=0.25.0
 

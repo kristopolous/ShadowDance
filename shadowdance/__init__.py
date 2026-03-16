@@ -8,6 +8,7 @@ timestamp, and duration.
 Supports multiple observability backends via adapter pattern:
 - LangSmith (default)
 - Langfuse
+- Weave (Weights & Biases)
 - Custom adapters (see shadowdance.adapters.example)
 
 Usage:
@@ -30,12 +31,14 @@ Usage:
         robot.Move(0.3, 0, 0)  # Nested under "pick_up_box"
 
 Environment Variables:
-    PLATFORM: Observability backend ("langsmith" or "langfuse", default: "langsmith")
+    PLATFORM: Observability backend ("langsmith", "langfuse", or "weave")
+            Default: "langsmith"
 
 Design:
     - Timestamps captured by ShadowDance (not adapters) for accurate latency
     - Fire-and-forget: adapters send in background, may drop under load
     - Observability never blocks user code
+    - Lazy imports: only the selected adapter's dependencies are required
 """
 
 from __future__ import annotations
@@ -56,6 +59,9 @@ from .adapters import (
 from .adapters.langsmith import LangSmithAdapter
 from .adapters.langfuse import LangfuseAdapter
 
+# WeaveAdapter is imported lazily to avoid requiring weave unless PLATFORM=weave
+# from .adapters.weave import WeaveAdapter
+
 
 # ============================================================================
 # Adapter Factory
@@ -73,13 +79,18 @@ def _get_adapter() -> ObservabilityAdapter:
 
     platform = os.environ.get("PLATFORM", "langsmith").lower()
 
-    if platform == "langfuse":
+    if platform == "weave":
+        from .adapters.weave import WeaveAdapter
+        _adapter_cache = WeaveAdapter()
+    elif platform == "langfuse":
+        from .adapters.langfuse import LangfuseAdapter
         _adapter_cache = LangfuseAdapter()
     elif platform == "langsmith":
+        from .adapters.langsmith import LangSmithAdapter
         _adapter_cache = LangSmithAdapter()
     else:
         raise ValueError(
-            f"Unknown PLATFORM: {platform}. Must be 'langsmith' or 'langfuse'"
+            f"Unknown PLATFORM: {platform}. Must be 'langsmith', 'langfuse', or 'weave'"
         )
 
     return _adapter_cache
@@ -394,6 +405,7 @@ __all__ = [
     "ObservabilityAdapter",
     "LangSmithAdapter",
     "LangfuseAdapter",
+    "WeaveAdapter",
     "TraceEvent",
     "DatasetExample",
 ]
